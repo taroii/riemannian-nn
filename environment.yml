@@ -1,0 +1,18 @@
+# Conda environment for the curvature-adaptive generalization experiments.
+#
+#   Create (laptop or server):   conda env create -f environment.yml
+#   Activate:                    conda activate riemannian-nn
+#   Update after edits:          conda env update -f environment.yml --prune
+#
+# This file deliberately installs ONLY python + pip via conda, then defers all
+# real dependencies to requirements.txt. That keeps one dependency mechanism
+# (pip) across macOS/CPU and Linux/CUDA, so the same repo clones-and-runs on the
+# laptop and the GPU box. See requirements.txt for the CPU-vs-CUDA torch switch.
+name: riemannian-nn
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r requirements.txt

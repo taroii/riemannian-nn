@@ -1,2 +1,24 @@
 .vscode/
 .claude/
+notes/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+build/
+dist/
+
+# Conda/venv
+.venv/
+env/
+
+# Experiment artifacts (keep the repo light; regenerate from sweeps).
+# Raw results tables and figures are reproducible, so they are not tracked.
+results/*.parquet
+results/*.csv
+results/RESULTS_summary.md
+results/checkpoints/
+figures/*.pdf
+figures/*.png

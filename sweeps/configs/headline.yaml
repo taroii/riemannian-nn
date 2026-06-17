@@ -1,0 +1,31 @@
+# Headline sweep (plan sections 3, 7, 12) -- the dense grid for the SERVER/GPU box.
+# ~8-12 kappa_data values x ~5-8 depths x >=10 seeds (plan section 7). Over-sample
+# rather than economize: density is what makes the phase-diagram contours
+# unambiguous. Estimated ~20-60 GPU-hours; embarrassingly parallel across cells.
+#
+#   python -m sweeps.run_sweep --config sweeps/configs/headline.yaml
+name: headline
+
+grid:
+  # x-axis: sqrt(|kappa_data|) spread, including ~0 for the Euclidean recovery.
+  kappa_data:  [0.0, -0.25, -0.5, -1.0, -2.0, -4.0, -6.0, -9.0, -12.0, -16.0]
+  kappa_model: [-1.0]            # hold hidden curvature fixed for the depth-axis headline
+  # y-axis: network depth N (the primary model knob of plan section 3).
+  depth:       [2, 3, 4, 5, 6, 8]
+  width:       [32]
+  seed:        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+fixed:
+  d0: 8
+  d_out: 1
+  n_train: 512
+  n_test: 4096
+  radius: 1.0
+
+train:
+  epochs: 400
+  lr: 0.01
+  # Option B of plan section 7: early-stop at a matched train loss so fit is held
+  # roughly constant and only the gap varies. Set to a small float (e.g. 0.02) for
+  # the matched-train-loss variant; null gives the raw-gap variant.
+  matched_train_loss: null

@@ -1,0 +1,31 @@
+# Core scientific stack
+numpy>=1.26
+scipy>=1.11
+pandas>=2.1
+pyarrow>=14.0        # parquet persistence for the results table
+matplotlib>=3.8
+networkx>=3.2        # graphs + delta-hyperbolicity
+scikit-learn>=1.4
+pyyaml>=6.0          # config-driven sweeps
+tqdm>=4.66
+
+# Geometry: the curvature knob, manifold ops, Riemannian optimizers.
+# geoopt's kappa-Stereographic model is the single-curvature sweep knob (kappa_data/kappa_model).
+geoopt>=0.5.0
+
+# ---------------------------------------------------------------------------
+# PyTorch.
+#
+#   Laptop / CPU (default -- what `pip install -r requirements.txt` gives you):
+#     torch>=2.2          # arm64 macOS wheel ships CPU + MPS
+#
+#   NVIDIA server / gaming PC (the heavy sweep): DO NOT use the line below.
+#     Install the CUDA build explicitly, e.g. for CUDA 12.1:
+#       pip install torch --index-url https://download.pytorch.org/whl/cu121
+#     then `pip install -r requirements.txt` for the rest. See README "Compute targets".
+# ---------------------------------------------------------------------------
+torch>=2.2
+
+# Optional (per-edge Ollivier/Forman-Ricci graph curvature, a complement to
+# delta-hyperbolicity). Heavier dep tree; uncomment on the server when needed.
+# GraphRicciCurvature>=0.5.3

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "riemannian-nn"
+version = "0.1.0"
+description = "Curvature-adaptive generalization for layerwise Riemannian neural networks (experiments)"
+requires-python = ">=3.10"
+# Runtime deps are pinned in requirements.txt (single source of truth for the
+# CPU-vs-CUDA torch switch). `pip install -e .` installs the package; install
+# requirements separately per the README.
+dependencies = []
+
+[tool.setuptools]
+packages = ["rnn", "rnn.data", "rnn.models", "rnn.instrument", "rnn.analysis"]
