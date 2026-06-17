@@ -50,6 +50,7 @@ def main():
 
     fixed = cfg.get("fixed", {})
     tcfg_d = cfg.get("train", {})
+    model_d = cfg.get("model", {})
     out_path = args.out or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "results",
@@ -83,6 +84,8 @@ def main():
             d0=fixed.get("d0", 8),
             d_out=fixed.get("d_out", 1),
             seed=cell["seed"],
+            mobius_bias=model_d.get("mobius_bias", False),
+            mobius_bias_scale=model_d.get("mobius_bias_scale", 1e-3),
             data_cfg=data_cfg,
             train_cfg=train_cfg,
         )

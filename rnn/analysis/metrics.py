@@ -39,6 +39,11 @@ def p1_slope(df: pd.DataFrame, fixed_depth: int | None = None) -> dict:
     d = df if fixed_depth is None else df[df["depth"] == fixed_depth]
     x = d["sqrt_abs_kappa_data"].to_numpy()
     y = d["gap"].to_numpy()
+    # P1 is undefined when kappa_data is not swept (e.g. the P2 sweep fixes it):
+    # a single x value has no slope. Report NaN rather than crashing.
+    if np.unique(x).size < 2:
+        return {"slope": float("nan"), "intercept": float("nan"), "r2": float("nan"),
+                "p_value": float("nan"), "n": int(len(x)), "note": "kappa_data not swept"}
     res = stats.linregress(x, y)
     return {
         "slope": float(res.slope),

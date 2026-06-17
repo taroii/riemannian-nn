@@ -58,10 +58,17 @@ def run_single(
     d0: int = 8,
     d_out: int = 1,
     seed: int = 0,
+    mobius_bias: bool = False,
+    mobius_bias_scale: float = 1e-3,
     data_cfg: SyntheticConfig | None = None,
     train_cfg: TrainConfig | None = None,
 ) -> dict:
-    """Train one model and return a flat result row (a plain dict)."""
+    """Train one model and return a flat result row (a plain dict).
+
+    ``mobius_bias`` adds an on-manifold bias per hidden layer; without it the
+    network telescopes to a Euclidean MLP and curvature is cosmetic (see README
+    "Key experimental finding"). Set it True to let kappa_model enter the function.
+    """
     torch.manual_seed(seed)
     train_cfg = train_cfg or TrainConfig()
 
@@ -76,6 +83,7 @@ def run_single(
         ModelConfig(
             d0=d0, width=width, depth=depth, d_out=d_out,
             kappa_data=kappa_data, kappa_model=kappa_model,
+            mobius_bias=mobius_bias, mobius_bias_scale=mobius_bias_scale,
         )
     )
     opt = torch.optim.Adam(
@@ -120,6 +128,7 @@ def run_single(
         "kappa_data": kappa_data,
         "sqrt_abs_kappa_data": meta["sqrt_abs_kappa_data"],
         "kappa_model": kappa_model,
+        "mobius_bias": mobius_bias,
         "depth": depth,
         "width": width,
         "d0": d0,

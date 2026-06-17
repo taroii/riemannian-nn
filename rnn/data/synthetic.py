@@ -20,17 +20,21 @@ IMPORTANT design caveat (read before trusting P1 empirically)
 -------------------------------------------------------------
 A model whose first operation is ``logmap0`` at the SAME curvature ``kappa_data``
 recovers ``z`` exactly (``log_o . exp_o = id`` at the origin), so a *single*
-matched-curvature layer is curvature-trivial. Curvature enters the *learned
-function* empirically only through (a) hidden-manifold geometry and depth
-(``kappa_model``, and hence ``Lambda_N`` -- prediction P2) for ``N >= 2`` layers,
-where the composition ``exp_{kappa_model}(W log_{kappa_model}(.))`` does not
-telescope to the identity; and (b) the analytic Bishop--Gromov input penalty
-``sqrt(|kappa_data|)/Lambda_N`` that the bound adds (prediction P1, overlaid as
-contours rather than learned). Therefore sweeps must use ``N >= 2``, and the
-choice of how strongly ``kappa_data`` should drive the *measured* gap is an open
-task-design decision (plan section 11) -- revisit it on the server before the
-full run. The generator below is correct and runnable; it does not pre-judge
-that decision.
+matched-curvature layer is curvature-trivial.
+
+CORRECTION (verified empirically on the first full run -- see README "Key
+experimental finding"): an EARLIER version of this note claimed curvature still
+enters for ``N >= 2`` because ``exp_{kappa_model}(W log_{kappa_model}(.))`` "does
+not telescope". THAT IS WRONG. Consecutive hidden layers share ``kappa_model``,
+so layer j's output ``exp_{kappa_model}(a_j)`` is undone by layer j+1's
+``log_{kappa_model}(.) = a_j``; every hidden exp/log pair cancels and the whole
+network collapses to a plain Euclidean MLP on ``log_{kappa_data}(x)``. Curvature
+(data AND model) is cosmetic for the learned function and the measured gap;
+``Lambda_N`` grows with curvature but multiplies maps that compose to the
+identity. To make curvature non-cosmetic the telescoping must be broken: Mobius
+bias, per-layer-VARYING curvature, or an intrinsic (non-tangent-origin) op.
+The generator below is correct and runnable; the open task-design decision (plan
+section 11) is really an architecture decision -- see the README finding.
 """
 
 from __future__ import annotations

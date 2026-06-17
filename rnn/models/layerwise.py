@@ -40,6 +40,8 @@ class ModelConfig:
     kappa_data: float = -1.0      # input-manifold curvature
     kappa_model: float = -1.0     # hidden-manifold curvature
     activation: str = "tanh"      # 1-Lipschitz; keeps P_j = ||W_j|| clean
+    mobius_bias: bool = False     # add an on-manifold Mobius bias per hidden layer
+    mobius_bias_scale: float = 1e-3  # init std of the bias tangent (its curvature footprint)
     dtype: torch.dtype = manifolds.DEFAULT_DTYPE
 
 
@@ -53,6 +55,14 @@ class LayerwiseRiemannianNN(nn.Module):
         M_0           = Stereographic(kappa_data)        (input)
         M_1 .. M_{N-1}= Stereographic(kappa_model)       (hidden)
         output        = tangent space (Euclidean)        (regression head)
+
+    Telescoping note (see README "Key experimental finding"): WITHOUT a Mobius
+    bias the hidden exp/log pairs cancel (``log_o^k(exp_o^k(a)) = a``) and the whole
+    network reduces to a Euclidean MLP on ``log_o^{kappa_data}(x)`` -- curvature is
+    cosmetic. Set ``mobius_bias=True`` to add an on-manifold bias
+    ``h <- h (+)_k exp_o^k(b_j)`` after each hidden exp; the gyro-addition does not
+    commute through the next log, so kappa_model genuinely enters the function and
+    the alpha_j (exp-expansion) factor of Lambda_N does real work.
     """
 
     def __init__(self, cfg: ModelConfig):
@@ -72,6 +82,13 @@ class LayerwiseRiemannianNN(nn.Module):
         self.acts = nn.ModuleList(
             [act_cls() for _ in range(cfg.depth - 1)] + [nn.Identity()]
         )
+        # On-manifold Mobius bias per hidden layer (breaks the exp/log telescoping).
+        self.mobius_bias = bool(cfg.mobius_bias)
+        if self.mobius_bias:
+            self.biases = nn.ParameterList([
+                nn.Parameter(cfg.mobius_bias_scale * torch.randn(cfg.width, dtype=cfg.dtype))
+                for _ in range(cfg.depth - 1)
+            ])
 
     def tangent_op(self, j: int, u: torch.Tensor) -> torch.Tensor:
         """F_j applied to a tangent vector (Linear then activation)."""
@@ -98,6 +115,11 @@ class LayerwiseRiemannianNN(nn.Module):
                 trace["manifold_out"].append(None if j == N - 1 else self.m_hidden)
             if j < N - 1:
                 h = self.m_hidden.expmap0(a)   # alpha_{j+1}
+                if self.mobius_bias:
+                    # On-manifold bias: h <- h (+)_k exp_o^k(b_j). Breaks the
+                    # exp/log telescoping so kappa_model enters the function.
+                    b_point = self.m_hidden.expmap0(self.biases[j].view(1, -1))
+                    h = self.m_hidden.mobius_add(h, b_point)
             else:
                 out = a                        # final tangent (regression) output
         if return_trace:

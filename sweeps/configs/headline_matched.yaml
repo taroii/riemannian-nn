@@ -1,0 +1,30 @@
+# Matched-train-loss variant of the headline sweep (plan section 7, option B).
+#
+# Identical grid to headline.yaml, but each run early-stops at a matched target
+# train loss so *fit* is held roughly constant across curvatures and only the
+# generalization gap varies. This is the fit/gap-confound control of plan
+# sections 7 and 9; compare its phase diagram against the raw-gap headline.
+#
+#   python -m sweeps.run_sweep --config sweeps/configs/headline_matched.yaml
+name: headline_matched
+
+grid:
+  kappa_data:  [0.0, -0.25, -0.5, -1.0, -2.0, -4.0, -6.0, -9.0, -12.0, -16.0]
+  kappa_model: [-1.0]
+  depth:       [2, 3, 4, 5, 6, 8]
+  width:       [32]
+  seed:        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+fixed:
+  d0: 8
+  d_out: 1
+  n_train: 512
+  n_test: 4096
+  radius: 1.0
+
+train:
+  epochs: 400
+  lr: 0.01
+  # Early-stop each run once train loss reaches this target, holding fit roughly
+  # constant across the grid so only the gap varies (plan section 7, option B).
+  matched_train_loss: 0.02

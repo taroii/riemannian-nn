@@ -15,6 +15,7 @@ server -- see the optional dependency in requirements.txt.
 from __future__ import annotations
 
 import itertools
+import math
 import random
 
 
@@ -49,15 +50,61 @@ def delta_hyperbolicity_sample(graph, num_samples: int = 50_000, seed: int = 0) 
 
 
 def estimated_curvature_from_delta(delta: float, diameter: float) -> float:
-    """Crude negative-curvature estimate from delta and graph diameter.
+    """Negative-curvature estimate from delta and graph diameter.
 
-    A standard heuristic maps a *more* hyperbolic graph (smaller delta relative to
-    diameter) to *more* negative curvature. We return a signed ``kappa`` estimate
-    on the same scale as the synthetic sweep so real points can be overlaid. Label
-    this as an estimate (plan section 9: real graphs are not constant-curvature).
+    We use the standard delta-hyperbolicity -> curvature relation: a delta-hyperbolic
+    geodesic space embeds with curvature bounded above by roughly ``-(log 3 / 2 delta)^2``
+    (the constant-curvature hyperbolic space H_kappa has delta = log(3)/(2 sqrt(|kappa|)),
+    so |kappa| ~ (log 3 / (2 delta))^2). We normalise delta by the graph radius
+    (diameter / 2) to make it scale-free, matching the unit-radius synthetic tube.
+
+    Returns a signed ``kappa`` on the same scale as the synthetic sweep so real
+    points can be overlaid. This is an *estimate* (plan section 9: real graphs are
+    not constant-curvature); label it as such.
     """
     if diameter <= 0:
         return 0.0
-    # delta/diameter in [0, ~0.5]; smaller -> more tree-like -> more curved.
-    ratio = max(delta / diameter, 1e-6)
-    return -(1.0 / ratio) ** 2 * 1e-2  # heuristic; recalibrate against synthetic grid
+    radius = diameter / 2.0
+    # Graphs have an integer shortest-path metric, so the smallest *resolvable*
+    # non-zero delta is 0.5. A tree measures delta == 0 (maximally hyperbolic);
+    # flooring at the 0.5 quantum keeps the curvature estimate finite ("at least
+    # this hyperbolic") instead of diverging to -inf.
+    delta_eff = max(delta, 0.5)
+    # Scale-free hyperbolicity: delta relative to the graph radius.
+    delta_rel = max(delta_eff / radius, 1e-6)
+    kappa_mag = (math.log(3.0) / (2.0 * delta_rel)) ** 2
+    return -kappa_mag
+
+
+def dataset_curvature(name: str, num_samples: int = 50_000, seed: int = 0) -> dict:
+    """Load a real dataset's graph, measure delta-hyperbolicity, estimate curvature.
+
+    Returns ``{delta, diameter, kappa_est, sqrt_abs_kappa_est, n_nodes, n_edges}``.
+    Prefers the largest connected component (diameter/shortest paths need
+    connectivity). This is the placement coordinate for the phase-diagram anchors
+    (plan section 3).
+    """
+    import networkx as nx
+
+    from rnn.data import real
+
+    g = real.load_graph(name)
+    if g.number_of_nodes() == 0:
+        raise ValueError(f"empty graph for {name!r}")
+    # Largest connected component (shortest-path metrics need connectivity).
+    if not nx.is_connected(g):
+        cc = max(nx.connected_components(g), key=len)
+        g = g.subgraph(cc).copy()
+
+    delta = delta_hyperbolicity_sample(g, num_samples=num_samples, seed=seed)
+    diameter = float(nx.diameter(g))
+    kappa = estimated_curvature_from_delta(delta, diameter)
+    return {
+        "dataset": name,
+        "delta": float(delta),
+        "diameter": diameter,
+        "kappa_est": float(kappa),
+        "sqrt_abs_kappa_est": math.sqrt(abs(kappa)),
+        "n_nodes": int(g.number_of_nodes()),
+        "n_edges": int(g.number_of_edges()),
+    }
