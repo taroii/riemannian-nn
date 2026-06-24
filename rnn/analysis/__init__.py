@@ -1,25 +1,9 @@
-"""Analysis: P1 slope, Lambda_N collapse, Kendall tau, phase diagram (plan section 8)."""
+"""Analysis: figures for the tree-embedding experiment."""
 
-from rnn.analysis.metrics import (
-    p1_slope,
-    kendall_tau,
-    collapse_fit,
-    fit_global_constant,
-)
 from rnn.analysis.figures import (
-    plot_phase_diagram,
-    plot_collapse,
-    plot_p1_slope,
-    plot_lambda_collapse,
+    plot_tree_embedding,
+    plot_tree_generalization,
+    plot_shepard,
 )
 
-__all__ = [
-    "p1_slope",
-    "kendall_tau",
-    "collapse_fit",
-    "fit_global_constant",
-    "plot_phase_diagram",
-    "plot_collapse",
-    "plot_p1_slope",
-    "plot_lambda_collapse",
-]
+__all__ = ["plot_tree_embedding", "plot_tree_generalization", "plot_shepard"]

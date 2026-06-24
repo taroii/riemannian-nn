@@ -1,5 +1,5 @@
-"""Models: the general layerwise Riemannian NN (and later HGCN / Q-GCN wrappers)."""
+"""Models: the naive Euclidean MLP baseline (geometry-blind comparison point)."""
 
-from rnn.models.layerwise import LayerwiseRiemannianNN, ModelConfig
+from rnn.models.euclidean import EuclideanMLP
 
-__all__ = ["LayerwiseRiemannianNN", "ModelConfig"]
+__all__ = ["EuclideanMLP"]

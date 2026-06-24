@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "riemannian-nn"
 version = "0.1.0"
-description = "Curvature-adaptive generalization for layerwise Riemannian neural networks (experiments)"
+description = "Hyperbolic vs Euclidean graph embedding (experiments for the Riemannian NN paper)"
 requires-python = ">=3.10"
 # Runtime deps are pinned in requirements.txt (single source of truth for the
 # CPU-vs-CUDA torch switch). `pip install -e .` installs the package; install
@@ -13,4 +13,4 @@ requires-python = ">=3.10"
 dependencies = []
 
 [tool.setuptools]
-packages = ["rnn", "rnn.data", "rnn.models", "rnn.instrument", "rnn.analysis"]
+packages = ["rnn", "rnn.data", "rnn.models", "rnn.analysis"]

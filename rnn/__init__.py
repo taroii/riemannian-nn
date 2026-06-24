@@ -1,18 +1,18 @@
-"""Curvature-adaptive generalization for layerwise Riemannian neural networks.
+"""Hyperbolic vs Euclidean graph embedding (experiments for the Riemannian NN paper).
 
-This package implements the experimental pipeline described in ``notes/plan.md``
-to validate the *shape* of the generalization bound of Theorem 10 /
-Corollary 11 in ``paper/main.tex``.
+The experiment shows the architecture's value proposition: embedding hierarchical
+(tree) structure into a Poincare ball achieves far lower distortion and better
+generalization than a Euclidean embedding at the same dimension -- the
+representational-capacity advantage the theory is built on.
 
-Subpackages mirror the plan's repo layout (plan section 10):
+Modules:
+- :mod:`rnn.manifolds`   curvature conventions + geoopt Stereographic construction
+- :mod:`rnn.data`        tree / hierarchy structure generators
+- :mod:`rnn.embed`       Euclidean vs Poincare-ball embedding + distortion / mAP metrics
+- :mod:`rnn.models`      the Euclidean MLP baseline
+- :mod:`rnn.analysis`    figures (distortion/mAP vs dim, generalization, Shepard)
 
-- :mod:`rnn.data`        synthetic generators (known kappa) + real loaders + delta-hyperbolicity
-- :mod:`rnn.models`      layerwise Riemannian NN, hyperbolic MLP, (later) HGCN / Q-GCN wrappers
-- :mod:`rnn.instrument`  Lambda_N estimation (alpha_j, beta_j, P_j via power iteration) + bound eval
-- :mod:`rnn.analysis`    contour fit, collapse, P1 slope, Kendall tau
-
-The driver scripts live in ``sweeps/`` (grid runner) and ``analysis/`` (figures),
-both of which import from this package.
+Driver: ``analysis/run_tree_embedding.py``.
 """
 
-__all__ = ["manifolds", "data", "models", "instrument", "analysis", "train"]
+__all__ = ["manifolds", "data", "models", "analysis", "embed"]

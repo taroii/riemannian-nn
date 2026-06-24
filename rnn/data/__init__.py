@@ -1,5 +1,5 @@
-"""Data: synthetic known-curvature generators, real loaders, curvature estimators."""
+"""Data: tree / hierarchy structure generators for the embedding experiment."""
 
-from rnn.data.synthetic import SyntheticConfig, make_synthetic_regression
+from rnn.data.tree_task import balanced_tree, random_tree
 
-__all__ = ["SyntheticConfig", "make_synthetic_regression"]
+__all__ = ["balanced_tree", "random_tree"]

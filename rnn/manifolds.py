@@ -42,29 +42,3 @@ def stereographic(kappa: float, *, learnable: bool = False) -> geoopt.Stereograp
     ``kappa_data -> 0`` recovery check (plan section 2 / section 9).
     """
     return geoopt.Stereographic(k=kappa, learnable=learnable)
-
-
-def s_kappa(kappa: float, radius: float) -> float:
-    """The angular-distortion factor ``S_kappa(R)`` from the paper.
-
-    For hyperbolic curvature (kappa < 0) with magnitude ``c = |kappa|``,
-
-        S_kappa(R) = sinh(sqrt(c) R) / (sqrt(c) R),
-
-    and ``S_kappa(R) -> 1`` as ``kappa -> 0``. This is the analytic upper bound on
-    ``alpha_j`` quoted in the paper; the instrumentation
-    (:mod:`rnn.instrument.lambda_n`) measures the realized constant instead, but
-    this closed form is useful as a sanity check and for the Euclidean-recovery
-    test.
-    """
-    c = abs(kappa)
-    if c == 0.0 or radius == 0.0:
-        return 1.0
-    x = math.sqrt(c) * radius
-    if kappa < 0:  # hyperbolic
-        return math.sinh(x) / x
-    return math.sin(x) / x  # spherical
-
-
-def to_dtype(x: torch.Tensor, dtype: torch.dtype = DEFAULT_DTYPE) -> torch.Tensor:
-    return x.to(dtype)
