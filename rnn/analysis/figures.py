@@ -37,9 +37,9 @@ def plot_tree_embedding(df, out_path: str) -> str:
                          color=colors[space], label=labels[space])
         axes[1].errorbar(x, agg["map_m"], yerr=agg["map_s"], fmt="o-", ms=4, lw=1.0,
                          color=colors[space], label=labels[space])
-    axes[0].set_xlabel("embedding dim"); axes[0].set_ylabel("distortion (lower better)")
+    axes[0].set_xlabel("embedding dim"); axes[0].set_ylabel("distortion")
     axes[0].set_yscale("log"); axes[0].set_title("(a) distance distortion"); axes[0].legend(fontsize=7)
-    axes[1].set_xlabel("embedding dim"); axes[1].set_ylabel("reconstruction mAP (higher better)")
+    axes[1].set_xlabel("embedding dim"); axes[1].set_ylabel("reconstruction mAP")
     axes[1].set_title("(b) tree reconstruction"); axes[1].legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")

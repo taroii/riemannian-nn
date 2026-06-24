@@ -521,65 +521,38 @@ Lipschitz constant inherited from Jacobians of the constituent
 operations} — is what carries over to the pseudo-Riemannian case, with the
 new terms coming from the Jacobians of $\widehat{\log}$, $\widehat{\exp}$,
 and parallel transport.
-
-\subsection{Pseudo-Riemannian Q-GCN architecture}
+\subsection{Pseudo-Riemannian Q-GCN as one instance}
 \label{sec:prelim-qgcn}
 
-We now summarize the pseudo-Riemannian graph convolutional network of
-\cite{xiong2022pseudo}. The essential difference from the Euclidean
-baseline is that hidden states no longer evolve in a Euclidean vector
-space but on a pseudo-hyperboloid, and aggregation is performed in a
-tangent space.
+The pseudo-Riemannian Q-GCN of \cite{xiong2022pseudo} enters this paper only
+through the transductive corollary of Section~\ref{sec:main-graph}; it is one
+\emph{instance} of the general layerwise model of
+Section~\ref{sec:prelim-riem-nn}, not a separate object of study. We therefore
+record only the two structural features the corollary uses and defer the
+remaining architectural detail to \cite{xiong2022pseudo}.
 
-\paragraph{Pseudo-hyperboloid.}
-Let $\R^{s, t+1}$ denote $\R^{s+t+1}$ equipped with the indefinite bilinear
-form $\langle x, y \rangle_t = -\sum_{i=0}^t x_i y_i + \sum_{j=t+1}^{s+t}
-x_j y_j$. The \emph{pseudo-hyperboloid} is $\mathcal Q_\beta^{s,t} = \{x
-\in \R^{s,t+1} : \langle x, x \rangle_t = \beta\}$ for $\beta < 0$. This
-geometry contains hyperbolic and spherical models as special or induced
-cases and is flexible enough to represent mixed graph topologies.
+\emph{(i) Geometry.} Hidden states live on the pseudo-hyperboloid
+$\mathcal Q_\beta^{s,t} = \{x\in\R^{s,t+1} : \langle x,x\rangle_t=\beta\}$,
+$\beta<0$, with $\langle x,y\rangle_t = -\sum_{i=0}^t x_iy_i +
+\sum_{j=t+1}^{s+t} x_jy_j$; this indefinite-signature space contains
+hyperbolic and spherical regimes as induced cases and so can match mixed
+graph topologies.
 
-\paragraph{Diffeomorphic log/exp.}
-$\mathcal Q_\beta^{s,t}$ is not globally geodesically connected: for some
-$(x, y)$, the usual logarithmic map $\log_x(y)$ is undefined. Q-GCN
-sidesteps this by transporting the geometry through a diffeomorphism
-$\psi : \mathcal Q_\beta^{s,t} \to \mathbb S^t_{-\beta} \times \R^s$ to a
-geodesically well-behaved product manifold. The resulting diffeomorphic
-logarithmic and exponential maps are
-\[
-\begin{aligned}
-\widehat{\log}^c_{\mathcal Q_\beta}(x) &:=
-\psi^{-1}\!\big(\log_{\mathbb S^t_{-\beta} \times \R^s}(\psi(x))\big),\\
-\widehat{\exp}^d_{\mathcal Q_\beta}(\xi) &:=
-\psi^{-1}\!\big(\exp_{\mathbb S^t_{-\beta} \times \R^s}(\psi(\xi))\big).
-\end{aligned}
-\]
-
-\paragraph{Lifted linear maps and bias translation.}
-Fix a reference point $o \in \mathcal Q_\beta^{s,t}$. Euclidean maps are
-lifted to the manifold by conjugation with $\widehat{\log}_o$ and
-$\widehat{\exp}_o$:
-$W_\ell \otimes_{\beta_\ell} h := \widehat{\exp}^d_{o, \beta_\ell}(W_\ell
-\widehat{\log}^c_{o, \beta_\ell}(h))$. Bias addition uses parallel transport:
-$\tilde h \oplus_{\beta_\ell} b_\ell := \exp^{\beta_\ell}_{\tilde h}(
-P^{\beta_\ell}_{o \to \tilde h}(b_\ell))$, with a special antipodal branch
-when the direct geodesic is broken.
-
-\paragraph{Layer update.}
-For node $i$ at layer $\ell$ with embedding $h_i^\ell \in \mathcal
-Q_{\beta_\ell}^{s,t}$, set $\bar h_j^\ell = (W_\ell \otimes_{\beta_\ell}
-h_j^\ell) \oplus_{\beta_\ell} b_\ell$. The Q-GCN update is
-\[
-h_i^{\ell+1} = \widehat{\exp}^d_{o, \beta_{\ell+1}}\!\bigg(
-\sigma\!\bigg(\sum_{j \in \mathcal N(i) \cup \{i\}}
-\widehat{\log}^c_{o, \beta_\ell}(\bar h_j^\ell)\bigg)\bigg).
-\]
-Euclidean features $x_i \in \R^{d_0}$ are mapped onto the
-pseudo-hyperboloid via a smooth initialization $h_i^0 = \varphi(x_i)$; the
-final embedding is mapped back to a tangent space and classified by a
-Euclidean head $\mathrm{logits}_i = W_{\mathrm{cls}} \widehat{\log}^c_{o,
-\beta_L}(h_i^L)$.
-
+\emph{(ii) Diffeomorphic charts.} $\mathcal Q_\beta^{s,t}$ is not globally
+geodesically connected, so Q-GCN transports the geometry through a
+diffeomorphism $\psi:\mathcal Q_\beta^{s,t}\to\mathbb S^t_{-\beta}\times\R^s$
+onto a geodesically well-behaved product manifold and defines the
+diffeomorphic maps $\widehat{\log}, \widehat{\exp}$ by conjugating the
+product-manifold $\log/\exp$ with $\psi^{\pm1}$. Each Q-GCN layer then carries
+out, \emph{in this chart}, a lifted linear map
+$W_\ell\otimes_{\beta_\ell}h := \widehat{\exp}_{o}(W_\ell\widehat{\log}_o(h))$,
+a parallel-transport bias, a tangent-space neighborhood aggregation, and a
+pointwise nonlinearity; thus every layer is of the
+form~\eqref{eq:phi-layer}, with the Euclidean features mapped on by a smooth
+initialization and the final embedding read out by a Euclidean head. It is
+the product chart $M_\psi=\prod_\ell(\mathbb S^t_{-\beta_\ell}\times\R^{s_\ell})$
+that makes the factorwise Bishop--Gromov step of
+Corollary~\ref{thm:prgcn_transductive_generalization} possible.
 \subsection{General layerwise Riemannian neural network}
 \label{sec:prelim-riem-nn}
 
@@ -928,7 +901,30 @@ $\mathcal F(A(T)) - \mathcal F^\star \le e^{-c\, T}(\mathcal F(A(0)) -
 \mathcal F^\star)$ provided the coercivity bound persists along the
 trajectory; the latter is exactly the curvature-aware analogue of the
 rank-margin persistence step of \cite{arora2018convergence}.
-
+\begin{remark}[Hypothesis 3 is the manifold form of balancedness and deficiency margin]
+\label{rem:coercivity-balanced}
+Hypothesis 3 of Theorem~\ref{thm:linear-descent} is not an extra assumption
+beyond \cite{arora2018convergence}: it is exactly the algebraic content that
+$\delta$-balancedness (Definition~\ref{def:balanced}) supplies in the
+Euclidean analysis, transplanted to the curved setting. Under
+$\delta$-balancedness the preconditioner
+$\mathcal P_A(G)=\sum_j W_{j+1:N}W_{j+1:N}^*\,G\,W_{1:j-1}^*W_{1:j-1}$ of
+Step~4 satisfies $\langle G,\mathcal P_A(G)\rangle \ge
+\big(\sigma_{\min}(A)^{2(N-1)/N}-O(\delta)\big)\|G\|_{\mathrm{HS}}^2$
+\cite{arora2018convergence}; taking $\delta$ small enough that the $O(\delta)$
+slack falls below $\tfrac14\sigma_{\min}(A)^{2(N-1)/N}$ yields the $\tfrac34$
+coercivity bound stated as Hypothesis 3. Curvature does not enter this
+step---it enters only the smoothness constant $L_{\kappa,R,D}$ of Step~2---so
+the balancedness bookkeeping is inherited unchanged. The deficiency margin
+(Definition~\ref{def:defmargin}) likewise plays its usual role: it keeps
+$\sigma_{\min}(A)$ bounded away from $0$ along the trajectory, which is what
+promotes the single-step inequality~\eqref{eq:linear-descent} into a linear
+rate. We phrase Hypothesis 3 as coercivity rather than as balancedness so that
+the theorem also covers other certificates of coercivity (e.g.\
+residual/identity initialization); in the deep-linear specializations of
+Theorems~\ref{thm:tangent-surrogate} and~\ref{thm:intrinsic-rate} we invoke
+the balancedness route directly.
+\end{remark}
 \paragraph{Where curvature enters.}
 The balancedness term \(\sigma_{\min}(A)^{2(N-1)/N}\) is algebraic and
 comes from the deep matrix factorization. The curvature of the output
@@ -1111,6 +1107,7 @@ factor depends on $c$: the curvature affects only the numerical values of
 $\tilde x^{(i)},\tilde y^{(i)}$ (hence of $\Phi$ and of $\mathcal E(W(0))$),
 not the convergence mechanism.
 \end{proof}
+
 
 \paragraph{Intrinsic squared hyperbolic distance loss}
 \label{sec:disc-intrinsic}
@@ -1392,11 +1389,45 @@ with per-step contraction $1-\gamma/S_c(R)^2$: the lower bound
 in~\eqref{eq:bounded-ball}, together with the value
 sandwich~\eqref{eq:loss-sandwich}, yields a Polyak--\L ojasiewicz inequality
 for $\mathcal L_c$ with constant degraded by $S_c(R)^2$ on bounded sublevel
-sets. Establishing the matching smoothness constant for $\mathcal L_c$ along
-the trajectory, and the continuous-time gradient-flow analogue, is left to
-future work.
+sets. The matching smoothness constant for $\mathcal L_c$ is in fact established
+for the deep-linear network in Theorem~\ref{thm:linear-descent}, where it is
+the curvature-dependent constant $L_{\kappa,R,D}$ of~\eqref{eq:LkRD}; the
+continuous-time gradient-flow analogue is left to future work.
 \end{remark}
-
+\begin{remark}[How Theorems~\ref{thm:linear-descent}, \ref{thm:tangent-surrogate}, and~\ref{thm:intrinsic-rate} relate]
+\label{rem:three-linear}
+The three linear-case results target the same network
+$h(x)=\exps(W_{1:L}\logs(x))$ but differ in \emph{which objective's gradient
+drives the iterates}, and correspondingly in \emph{where curvature appears}.
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+\item \emph{Tangent surrogate (Theorem~\ref{thm:tangent-surrogate}).}
+Gradient descent runs on $\mathcal E$, which lives entirely in the tangent
+space. By the collapse identity this is \emph{identically} the Euclidean
+problem of \cite{arora2018convergence}: curvature enters only the numerical
+values of the lifted data, never the dynamics, and the rate is curvature-free.
+\item \emph{Intrinsic via the surrogate (Theorem~\ref{thm:intrinsic-rate}).}
+The \emph{same} surrogate iterates are scored under $\mathcal L_c$. Curvature
+surfaces once, as the prefactor $S_c(R)^2$ in the value
+sandwich~\eqref{eq:loss-sandwich}; the exponent stays the curvature-free
+$\gamma$. One optimizes the wrong object and pays a bounded multiplicative
+price for reporting the right one.
+\item \emph{Intrinsic directly (Theorem~\ref{thm:linear-descent}).}
+Gradient descent runs on $\mathcal F=\mathcal L_c$ itself, with factor
+gradients from the Riemannian pullback gradient~\eqref{eq:pullback-gradient}
+rather than from $\nabla\mathcal E$. Curvature now enters the \emph{smoothness
+constant} $L_{\kappa,R,D}$ of~\eqref{eq:LkRD} and hence the admissible step
+$\eta^\star_\kappa=O(1/S_\kappa(R)^2)$
+(Corollary~\ref{cor:curvature-stepsize}); at the largest admissible step the
+per-iteration contraction is governed by
+$\sigma_{\min}(A)^{2(N-1)/N}/S_\kappa(R)^2$, i.e.\ curvature is paid in the
+\emph{exponent}.
+\end{itemize}
+Thus Theorem~\ref{thm:linear-descent} is the rigorous ``direct-minimization''
+counterpart anticipated in Remark~\ref{rem:direct-intrinsic}: the prefactor
+$S_c(R)^2$ of Theorem~\ref{thm:intrinsic-rate} is traded for the
+curvature-slowed exponent $1-\gamma/S_c(R)^2$. Theorem~\ref{thm:tangent-surrogate}
+is the common $c\to0^+$ limit of both, recovered as $S_\kappa(R)\to1$.
+\end{remark}
 
 % =====================================================================
 \subsection{Nonlinear case}
@@ -1453,6 +1484,29 @@ rule for $\mathcal L$ to obtain \(L_{\mathrm{net}}\)-smoothness on the
 tube; the full argument is given in
 Appendix~\ref{sec:proof-general-descent}.
 
+\begin{remark}[The layer curvatures are fixed; the weights move only the operating radius]
+\label{rem:fixed-curvature}
+Two senses of ``manifold curvature'' should be separated. The sectional
+curvatures $\kappa_0,\dots,\kappa_N$ of the layer manifolds
+$\mathcal M_0,\dots,\mathcal M_N$ are \emph{architectural constants}: the
+modeller fixes the geometry of each layer (e.g.\ a Poincar\'e ball of
+curvature $-c$, or a pseudo-hyperboloid) before training, and gradient descent
+on $\theta$ does \emph{not} change them. The weights act on the \emph{maps
+between} these fixed manifolds, not on their metrics. Consequently
+$L_{\mathrm{net}}$ does depend on \emph{all} curvatures
+$\kappa_0,\dots,\kappa_N$, as recorded after~\eqref{eq:Lnet-def}---but only
+through the constants $\alpha_j,\beta_j,\gamma_j,\delta_j$, which the weights
+influence solely via the \emph{operating radius} $R_j$: the weights determine
+where the activations $a_j^{(i)}(\theta)$ land, hence the smallest $R_j$ with
+$a_j^{(i)}(\theta)\in B_{V_j}(0,R_j)$, and the hyperbolic estimate
+$\alpha_j\lesssim S_{\kappa_j}(R_j)$ couples a fixed $\kappa_j$ to a
+weight-dependent $R_j$. This is a concrete lever: keeping activations near each
+base point $o_j$ (small $R_j$) holds $\alpha_j\approx1$ even at large
+$|\kappa_j|$, whereas pushing them outward pays the full $S_{\kappa_j}(R_j)$
+penalty. The bound is thus curvature-aware \emph{and} weight-aware, but the
+curvature it sees is the fixed geometry of the layers, scaled by how far the
+learned representation travels on each.
+\end{remark}
 \paragraph{Where each manifold curvature enters.}
 The curvature of \(\mathcal M_j\) enters through
 \(\alpha_j = \sup \|D\exp_{o_j}^{(j)}\|\),
@@ -1559,7 +1613,7 @@ $\mathcal M_0$ is Euclidean and $\beta_j = \alpha_j = 1$ for every $j$,
 \(\psi \to 0\) and~\eqref{eq:layerwise-gen} reduces to the standard
 $L_\ell \Lambda_N$ Rademacher bound for Lipschitz function classes.
 
-\paragraph{Where each manifold curvature enters.}
+\paragraph{Input- versus hidden-manifold curvature in the bound.}
 In~\eqref{eq:layerwise-gen}, the curvature of the \emph{input} manifold
 $\mathcal M_0$ enters through the Bishop--Gromov term
 $\psi(\kappa_{\max}^{(0)}, L_\ell \Lambda_N)$: it governs the volume
@@ -1710,17 +1764,104 @@ regime are unknown.
 \label{sec:experiments}
 % =====================================================================
 
-We validate the optimization side of our theory --- the descent lemma
-(Theorem~\ref{thm:general-descent}), its deep-linear specialization
-(Theorem~\ref{thm:linear-descent}), and the intrinsic-loss specialization
-of Section~\ref{sec:disc-intrinsic} --- on the deep-linear hyperbolic
-network of Section~\ref{sec:disc-hyperbolic}, i.e.\ the instance of the
-general layerwise model (Section~\ref{sec:prelim-riem-nn}) with
-$M_j = \D^{d_j}_c$ for every layer. All experiments probe the way a single
-scalar, the angular distortion factor
-$S_c(R) = \sinh(\sqrt c R)/(\sqrt c R)$, governs optimization; this is the
-factor through which curvature enters both $L_{\mathrm{net}}$ and the
-bounded-ball comparison of Section~\ref{sec:disc-intrinsic}.
+We report two experiments. Section~\ref{sec:exp-embed} quantifies the
+representational and generalization advantage of matched curvature on
+hierarchical data --- the premise underlying the architectures of
+Section~\ref{sec:prelim} --- by comparing Poincar\'e-ball and Euclidean
+embeddings of a tree. Section~\ref{sec:exp-opt} validates the optimization
+theory of Section~\ref{sec:main}, the descent lemma
+(Theorem~\ref{thm:general-descent}) and its deep-linear specialization
+(Theorem~\ref{thm:linear-descent}), on the deep-linear hyperbolic network.
+
+\subsection{Representation and generalization of hierarchical structure}
+\label{sec:exp-embed}
+
+\paragraph{Setup.}
+We embed the nodes of a balanced binary tree ($127$ nodes, diameter $12$)
+into a $d$-dimensional Euclidean ball and into the Poincar\'e ball
+$\D^d_c$ ($c=1$), fitting each embedding so that a globally rescaled
+embedding distance matches the graph (shortest-path) distance. Euclidean
+embeddings parametrize the points directly; Poincar\'e embeddings
+parametrize a tangent vector $v_i$ and set the point to $\exps(v_i)$, so
+both are trained by Adam on free parameters with a single learned scale ---
+an identical-optimizer comparison. We report two scale-free metrics over all
+node pairs: the average relative distortion
+$\frac{1}{|P|}\sum_{(i,j)}|s\,d_M(i,j)-d_G(i,j)|/d_G(i,j)$ and the
+reconstruction mAP (per node, the average precision of recovering its graph
+neighbors by embedding distance). All numbers are means over three seeds.
+
+\paragraph{Representation.}
+Figure~\ref{fig:tree-embed} reports both metrics against embedding
+dimension. From $d=3$ the Poincar\'e embedding attains distortion
+$\approx 0.01$ and reconstruction mAP $\approx 1.0$, while the Euclidean
+embedding stays at distortion $0.07$--$0.16$ and mAP $0.43$--$0.73$ and does
+not reach the Poincar\'e values even at $d=10$. Both are poor at $d=2$:
+low-distortion tree embedding in the Poincar\'e disk requires near-boundary
+placement that gradient descent does not reach (the construction of
+\cite{sala2018representation} is combinatorial), and the Euclidean plane
+cannot embed the tree with low distortion either. Figure~\ref{fig:shepard}
+shows the $d=10$ case as a Shepard diagram: Poincar\'e embedding distances
+lie on the identity (distortion $0.009$), while Euclidean distances scatter
+(distortion $0.070$).
+
+\paragraph{Generalization.}
+To separate recovery of structure from mere fitting, we fit each embedding
+to a random subset of node-pair distances and evaluate distortion on the
+held-out pairs ($d=10$). Figure~\ref{fig:tree-gen} plots held-out distortion
+against the held-out fraction. The Poincar\'e embedding generalizes markedly
+better: held-out distortion $0.016$, $0.031$, $0.047$, $0.200$ at held-out
+fractions $0.3$, $0.5$, $0.7$, $0.9$, against $0.091$, $0.095$, $0.111$,
+$0.283$ for Euclidean --- a $3$--$6\times$ reduction that persists until
+$90\%$ of pairs are withheld --- with a correspondingly small
+train-to-held-out gap.
+
+These results quantify the representational premise of
+Section~\ref{sec:intro} on a controlled hierarchy and show that the
+matched-curvature representation generalizes from partial structure. They
+are complementary to Theorem~\ref{thm:layerwise-generalization}, which they
+do not test numerically.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{tree_embedding.png}
+\caption{Embedding a balanced binary tree ($127$ nodes) into Euclidean
+vs.\ Poincar\'e ($\D^d_c$, $c=1$) space, means over three seeds.
+\textbf{(a)} average relative distortion and \textbf{(b)} reconstruction
+mAP against embedding dimension. From $d=3$ the Poincar\'e embedding attains
+$\approx0.01$ distortion and mAP $\approx1.0$, which the Euclidean embedding
+does not reach by $d=10$.}
+\label{fig:tree-embed}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{tree_shepard.png}
+\caption{Shepard diagram at $d=10$: rescaled embedding distance vs.\ graph
+distance over all node pairs. Poincar\'e distances lie on the identity
+(distortion $0.009$); Euclidean distances scatter (distortion $0.070$).}
+\label{fig:shepard}
+\end{figure*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{tree_generalization.png}
+\caption{Generalization at $d=10$: distortion on held-out node-pair
+distances (solid) and on the fitted pairs (dashed) vs.\ the fraction of
+pairs withheld. The Poincar\'e embedding infers unseen distances
+$3$--$6\times$ more accurately than the Euclidean one.}
+\label{fig:tree-gen}
+\end{figure}
+
+\subsection{Optimization of the deep-linear hyperbolic network}
+\label{sec:exp-opt}
+
+We validate the descent theory --- Theorem~\ref{thm:general-descent} and its
+deep-linear specialization Theorem~\ref{thm:linear-descent}, with the
+intrinsic squared-distance loss of Section~\ref{sec:disc-intrinsic} --- on
+the network of Section~\ref{sec:disc-hyperbolic} ($M_j=\D^{d_j}_c$ for every
+layer). Curvature enters through the angular-distortion factor
+$S_c(R)=\sinh(\sqrt c R)/(\sqrt c R)$, which governs both $L_{\mathrm{net}}$
+and the bounded-ball comparison of Section~\ref{sec:disc-intrinsic}.
 
 \paragraph{Setup.}
 We implement the closed-form Poincar\'e-ball maps $\exps,\logs$ of
@@ -1793,61 +1934,33 @@ Theorem~\ref{thm:linear-descent} is maintained during training.}
 \label{fig:descent}
 \end{figure*}
 
-\paragraph{(a) Convergence and the $c\to0$ collapse.}
-Figure~\ref{fig:descent}(a) shows loss-excess trajectories under
-full-batch gradient descent at a fixed step size, on the single fixed
-tangent-space problem, for $c \in \{0,\tfrac12,1,2,4,8\}$, together with
-the Euclidean tangent-surrogate trajectory. At $c=0$ the intrinsic-loss
-trajectory is indistinguishable from the tangent-surrogate trajectory:
-this is the collapse $\mathcal L_c \to \mathcal E$ as $c \to 0^+$ asserted
-in Section~\ref{sec:disc-intrinsic}, observed to machine precision. For
-$c>0$ the trajectories separate, but --- as anticipated above --- the
-fixed-step iteration is \emph{faster}, not slower, at higher curvature,
-because $S_c(R)^2$ amplifies the effective gradient. This panel is a
-qualitative sanity check of the collapse and of the gradient-amplification
-mechanism, not a rate law.
-
-\paragraph{(b) Admissible step size shrinks with curvature.}
-Figure~\ref{fig:descent}(b) reports the maximum stable step size
-$\eta^\star$, defined as the largest $\eta$ on a geometric grid for which
-the iteration remains bounded and decreases the loss over a fixed horizon.
-$\eta^\star$ is strictly monotonically decreasing in $c$, dropping by
-roughly a factor of $80$ from $c=0$ to $c=8$. This is the central
-empirical result: it is the direct signature of the curvature-dependent
-step-size restriction~\eqref{eq:general-stepsize} of
-Theorem~\ref{thm:general-descent}, with $L_{\mathrm{net}}$
-of~\eqref{eq:Lnet-def} increasing in curvature through
-$\alpha_j,\gamma_j$, and of condition~\eqref{eq:linear-stepsize} of
-Theorem~\ref{thm:linear-descent}. Because $L_{\mathrm{net}}$ is an upper
-bound, we report the monotone ordering rather than a match of constants.
-
-\paragraph{(c) Beyond the bare $S_c(R)^2$ factor.}
-Figure~\ref{fig:descent}(c) normalizes $\eta^\star$ to its $c=0$ value and
-compares it against $1/S_c(R)^2$. The measured step size falls faster than
-$1/S_c(R)^2$ alone. This is consistent with, and indeed evidence for, the
-full curvature-dependent smoothness constant $L_{\kappa,R,D}$
-of~\eqref{eq:LkRD}: there curvature enters not only through
-$S_\kappa(R)^2$ but also through the squared-distance Hessian bound
-$H_\kappa(D)$ and the exponential-map second-derivative bound
-$B_\kappa(R)$. A model in which only the angular-distortion factor
-contributed would \emph{under}-predict the step-size penalty; the data sit
-below that prediction, indicating that the additional terms in
-$L_{\kappa,R,D}$ are doing real work.
-
-\paragraph{(d) Balancedness is preserved; tangent surrogate is
-curvature-invariant.}
-Figure~\ref{fig:descent}(d) tracks the $\delta$-balancedness defect of
-Definition~\ref{def:balanced} along training. Starting from an exactly
-balanced initialization, the defect remains below $\sim\!3\times10^{-3}$
-throughout at every curvature, so the structural hypothesis of
-Theorem~\ref{thm:linear-descent} holds along the trajectory rather than
-only at initialization; this is the curvature analogue of the
-balancedness experiments of \cite{arora2018convergence}. As a control
-(not shown), training the tangent-space surrogate $\mathcal E$ on the
-tangent-lifted data yields a per-step contraction exponent that is
-identical across all $c$ to machine precision, confirming the reduction of
-Section~\ref{sec:disc-tangent}: the surrogate is curvature-blind and
-curvature enters only through the dataset.
+\paragraph{Results.}
+Figure~\ref{fig:descent} reports four measurements against curvature
+$c\in\{0,\tfrac12,1,2,4,8\}$ at $R=0.8$.
+\textbf{(a)} At a fixed step size the intrinsic-loss trajectory at $c=0$
+coincides with the Euclidean surrogate to machine precision (the $c\to0$
+collapse of Section~\ref{sec:disc-intrinsic}); for $c>0$ the fixed-step
+iteration is \emph{faster}, as $S_c(R)^2$ amplifies the effective gradient.
+\textbf{(b)} The maximum stable step size $\eta^\star$ --- the largest
+$\eta$ on a geometric grid that stays bounded and decreases the loss over a
+fixed horizon --- is strictly decreasing in $c$, by about $80\times$ from
+$c=0$ to $c=8$; this is the signature of the step-size
+restriction~\eqref{eq:general-stepsize},~\eqref{eq:linear-stepsize} with
+$L_{\mathrm{net}}$ of~\eqref{eq:Lnet-def} increasing in curvature. As
+$L_{\mathrm{net}}$ is an upper bound we report the monotone ordering, not a
+match of constants.
+\textbf{(c)} Normalized to its $c=0$ value, $\eta^\star$ falls faster than
+$1/S_c(R)^2$ alone, consistent with the additional Hessian and
+exponential-map second-derivative terms $H_\kappa(D),B_\kappa(R)$ in
+$L_{\kappa,R,D}$~\eqref{eq:LkRD}.
+\textbf{(d)} From a balanced initialization the $\delta$-balancedness defect
+$\max_j\|W_{j+1}^\top W_{j+1}-W_j W_j^\top\|_F$ stays $\lesssim
+3\times10^{-3}$ throughout training at every curvature, so the structural
+hypothesis of Theorem~\ref{thm:linear-descent} is maintained; as a control,
+the tangent surrogate $\mathcal E$ trained on the lifted data has a per-step
+contraction exponent identical across $c$ to machine precision. Figure~\ref{fig:collapse}
+is the fixed-step counterpart of (b): the per-step convergence exponent
+$|b|$ equals the surrogate exponent at $c=0$ and increases with $c$.
 
 \begin{figure}[t]
 \centering
