@@ -1,4 +1,4 @@
-# Conda environment for the curvature-adaptive generalization experiments.
+# Conda environment for the curvature/optimization experiments.
 #
 #   Create (laptop or server):   conda env create -f environment.yml
 #   Activate:                    conda activate riemannian-nn

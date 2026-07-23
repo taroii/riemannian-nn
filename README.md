@@ -1,77 +1,60 @@
-# Hyperbolic vs Euclidean graph embedding
+# Curvature and optimization of deep linear networks on Riemannian manifolds
 
-Experiments for the layerwise Riemannian neural network paper (`paper/main.tex`).
-This is the *positive* experiment: a hierarchy (tree) embeds into a **Poincaré ball**
-with far lower distortion, near-perfect reconstruction, and better generalization than
-a **Euclidean** embedding at the same dimension — the representational-capacity
-advantage that motivates the architecture.
+Experiments for the paper *The Influence of Curvature on Deep Linear Networks on
+Riemannian Manifolds* (`paper/main.tex`). We study how the sectional curvature of
+the target manifold affects the optimization of a deep linear network trained
+under the **intrinsic** squared-geodesic loss versus the Euclidean **tangent-space
+surrogate**.
+
+The network is the collapse-form deep-linear map on the κ-Stereographic model,
+
+```
+h(x) = exp_o( W_{1:N} · log_o(x) ),   W_{1:N} = W_N ... W_1,
+```
+
+with a single fixed tangent-space regression problem lifted through the geometry
+at each curvature, so **curvature enters only through the geometry, never through
+the data**.
+
+## What the experiments show
+
+Signed sectional curvature `K` (K<0 hyperbolic, K=0 Euclidean, K>0 spherical):
+
+1. **K→0 collapse + linear convergence.** At K=0 the intrinsic loss equals the
+   Euclidean surrogate exactly; gradient descent converges linearly at every K.
+2. **The step-size mechanism.** The theorem's step-size ceiling
+   `η*_K = O(1/S_K(R)²)` is a worst-case bound whose clean witness is the
+   **near-optimum landscape sharpness** `λ*_K` (top Hessian eigenvalue of the
+   intrinsic loss at the converged solution) — where the paper's adaptive-schedule
+   analysis gives `L → S_K(R)²·mean‖ξ‖²`. It **increases with hyperbolic curvature
+   and decreases for spherical curvature** (Cor.: positive curvature *relaxes* the
+   step), matching `S_K(R)²` in the moderate regime and exceeding it at strong
+   hyperbolic curvature (the `H_K, B_K` terms).
+3. **δ-balancedness** stays small along training at every curvature, so the
+   structural hypothesis of the descent lemma is maintained.
+
+> **Honest scope.** `S_K(R)²` is a *worst-case* factor. The whole-trajectory stable
+> step from a high-residual initialization is nearly curvature-flat (the benign
+> region dominates); the curvature penalty is a *late-phase* effect, which is why we
+> measure sharpness at the optimum. We validate the shape and sign of the theory,
+> not an inflated magnitude.
 
 ## Setup
 
 ```bash
 conda env create -f environment.yml      # creates env "riemannian-nn" (python 3.11 + pip deps)
 conda activate riemannian-nn
-pip install -e .                          # install the `rnn` package (editable)
 ```
 
-Geometry runs in **float64** (the Poincaré model is unstable in float32). The
-experiment is small and CPU-only (no GPU needed). On a CUDA box, install the matching
-torch build first (`pip install torch --index-url https://download.pytorch.org/whl/cuXXX`)
-before `pip install -r requirements.txt`.
+Geometry runs in **float64** (the stereographic model is unstable in float32). The
+experiment is small and CPU-only (no GPU needed).
 
 ## Run
 
 ```bash
-python -m analysis.run_tree_embedding
+python run.py
 ```
 
-Writes `results/tree_embedding.parquet`, `results/tree_generalization.parquet`, the
-figures below, and `results/RESULTS_tree_embedding.md`. Results/figures are gitignored
-and fully regenerable.
+Writes `figure_descent.pdf`, `figure_collapse.pdf` and `RESULTS.md`. All generated artifacts
+are gitignored and fully regenerable.
 
-## Layout
-
-| Path | Role |
-|------|------|
-| `rnn/manifolds.py` | curvature conventions + geoopt Stereographic construction |
-| `rnn/data/tree_task.py` | tree / hierarchy structure generators |
-| `rnn/embed.py` | Euclidean vs Poincaré-ball embedding + distortion / mAP metrics |
-| `rnn/models/euclidean.py` | the naive Euclidean MLP baseline |
-| `rnn/analysis/figures.py` | figures (distortion/mAP vs dim, generalization, Shepard) |
-| `analysis/run_tree_embedding.py` | experiment driver |
-| `figures/`, `results/` | generated artifacts (gitignored) |
-
-## Results (balanced binary tree, 127 nodes)
-
-**Representation — distortion / reconstruction mAP vs embedding dim** (`tree_embedding.pdf`):
-
-| dim | Euclid distortion / mAP | Hyperbolic distortion / mAP |
-|-----|-------------------------|------------------------------|
-| 2   | 0.228 / 0.27            | 0.36 / 0.26  (both hard*)     |
-| 3   | 0.160 / 0.43            | **0.012 / 0.99**             |
-| 5   | 0.106 / 0.61            | **0.010 / 1.00**             |
-| 10  | 0.070 / 0.73            | **0.009 / 1.00**             |
-
-From `dim >= 3` hyperbolic embeds the tree with ~10x lower distortion and near-perfect
-reconstruction, while Euclidean never gets there even at dim 10. *`dim == 2` is hard
-for gradient methods in both spaces (the 2D Poincaré disk needs embeddings at
-machine-precision near the boundary; Sarkar's low-distortion 2D construction is
-combinatorial, not gradient-based).
-
-**Generalization — held-out distortion vs fraction of pairs held out, dim 10**
-(`tree_generalization.pdf`): fit the embedding to a subset of node-pair distances,
-evaluate on held-out pairs.
-
-| fraction held out | Euclid held-out | Hyperbolic held-out |
-|-------------------|-----------------|----------------------|
-| 0.3 | 0.091 | **0.016** |
-| 0.5 | 0.095 | **0.031** |
-| 0.7 | 0.111 | **0.047** |
-| 0.9 | 0.283 | **0.200** |
-
-Hyperbolic infers unseen distances from partial structure 3-6x better — it generalizes
-the hierarchy, not just fits it.
-
-**Shepard diagram, dim 10** (`tree_shepard.pdf`): scaled embedding distance vs true
-graph distance. Hyperbolic points hug the diagonal (faithful metric, distortion ~0.01);
-Euclidean scatter widely (~0.07).

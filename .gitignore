@@ -1,6 +1,9 @@
-.vscode/
-.claude/
-notes/
+paper/
+
+# Generated, regenerable artifacts (figures and results pop up in the root)
+figure_*.pdf
+*.png
+RESULTS.md
 
 # Python
 __pycache__/
@@ -10,15 +13,8 @@ __pycache__/
 build/
 dist/
 
-# Conda/venv
+# Envs / editors
 .venv/
 env/
-
-# Experiment artifacts (keep the repo light; regenerate from sweeps).
-# Raw results tables and figures are reproducible, so they are not tracked.
-results/*.parquet
-results/*.csv
-results/RESULTS_summary.md
-results/checkpoints/
-figures/*.pdf
-figures/*.png
+.vscode/
+.claude/
