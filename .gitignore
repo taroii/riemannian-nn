@@ -3,6 +3,7 @@ paper/
 # Generated, regenerable artifacts (figures and results pop up in the root)
 figure_*.pdf
 *.png
+*.csv
 RESULTS.md
 
 # Python
@@ -18,3 +19,6 @@ dist/
 env/
 .vscode/
 .claude/
+
+# macOS
+.DS_Store

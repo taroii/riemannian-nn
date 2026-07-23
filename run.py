@@ -1,111 +1,170 @@
-"""Run the descent optimization experiment and write the paper figures.
+"""Run the optimization experiments and write all paper figures + RESULTS.md.
 
-    python run.py
+    python run.py            # QUICK: local sanity pass (few seeds, one R/arch)
+    python run.py --full     # FULL: server sweep (many seeds, R x architecture grid)
 
-Regenerates the paper's optimization figures (Section 'Experiments', fig:descent
-and fig:collapse) and RESULTS.md:
-  - the K->0 collapse of the intrinsic loss onto the Euclidean surrogate;
-  - the near-optimum landscape sharpness lambda*_K vs signed curvature K (the
-    late-phase step-size mechanism), and its scaling against S_K(R)^2;
-  - the delta-balancedness defect along training.
+Experiments (all honest, path A):
+  E1  K->0 collapse + linear convergence            fig:descent (a)
+  E2  near-optimum sharpness ~ S_K(R)^2, sign flip  fig:descent (b,c), fig:scaling
+  E3  delta-balancedness maintained                 fig:descent (d)
+  E7  no spurious minima on the tube                fig:landscape
+  GC  gradient correctness (autograd vs finite diff) RESULTS.md
 
-Honest framing: the step-size ceiling eta*_K = O(1/S_K(R)^2) is a worst-case bound
-whose clean witness is the late-phase sharpness. We report that sharpness and its
-S_K(R)^2 scaling, not an inflated whole-trajectory eta*.
-
-Figures are written to the repo root and copied into paper/ so \\includegraphics
-resolves. Both are gitignored and fully regenerable.
+Figures land in the repo root and are copied into paper/ so \\includegraphics
+resolves. Raw sweep points are written to scaling_points.csv for re-analysis
+without recompute. Everything is gitignored and regenerable.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 
 import figures
-from optimization import DescentConfig, run_descent_experiment
+import optimization as O
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PAPER_DIR = os.path.join(ROOT, "paper")
 
 
-def main():
-    cfg = DescentConfig()
-    exp = run_descent_experiment(cfg)
+def quick_config():
+    return O.Config(
+        n_seeds=5, train_steps=4000,
+        sweep_radii=(1.2,), sweep_arch=((3, 6),),
+        sweep_curvatures=(0.5, 0.0, -0.5, -1.0, -2.0, -4.0),
+        landscape_inits=12,
+    )
 
-    descent = figures.plot_descent(exp, os.path.join(ROOT, "figure_descent.pdf"))
-    collapse = figures.plot_optimization_collapse(
-        exp, os.path.join(ROOT, "figure_collapse.pdf"))
-    # copy next to the paper source so \includegraphics resolves.
+
+def full_config():
+    return O.Config(
+        n_seeds=50, train_steps=8000,
+        curvatures=(1.0, 0.5, 0.0, -0.5, -1.0, -2.0, -4.0, -6.0, -8.0),
+        sweep_radii=(0.8, 1.0, 1.2, 1.5),
+        sweep_arch=((2, 4), (3, 6), (4, 10)),
+        sweep_curvatures=(0.5, 0.0, -0.5, -1.0, -2.0, -4.0, -6.0),
+        landscape_inits=50,
+    )
+
+
+def _copy_to_paper(path):
     if os.path.isdir(PAPER_DIR):
-        for src in (descent, collapse):
-            with open(src, "rb") as f, \
-                 open(os.path.join(PAPER_DIR, os.path.basename(src)), "wb") as g:
-                g.write(f.read())
-
-    _write_md(exp, cfg, descent, collapse)
-    _print_summary(exp)
-    print(f"- figures: {os.path.basename(descent)}, {os.path.basename(collapse)} "
-          f"(root + paper/)")
-    print("- results: RESULTS.md")
+        with open(path, "rb") as f, open(os.path.join(PAPER_DIR, os.path.basename(path)), "wb") as g:
+            g.write(f.read())
 
 
-def _print_summary(exp):
-    Ks = sorted(exp["curvatures"])
-    print("# Optimization experiment (paper Section 'Experiments')")
-    print(f"- radius R = {exp['radius']}, seeds = {exp['n_seeds']}")
-    print(f"- K=0 intrinsic == Euclidean surrogate (collapse): "
-          f"exponent |b| intrinsic={exp['exponents'][0.0]:.4g} vs "
-          f"surrogate={exp['exponents']['surrogate']:.4g}")
-    print("- near-optimum sharpness lambda*_K, predicted step 2/lambda*, vs S_K(R)^2:")
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--full", action="store_true", help="server sweep (many seeds/grid)")
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="parallel worker processes (0 = auto: all cores-2 in --full)")
+    args = ap.parse_args()
+    cfg = full_config() if args.full else quick_config()
+    if args.jobs > 0:
+        cfg.jobs = args.jobs
+    elif args.full:
+        cfg.jobs = max(1, (os.cpu_count() or 2) - 2)
+    print(f"[run] mode={'FULL' if args.full else 'QUICK'}  seeds={cfg.n_seeds}  "
+          f"radii={cfg.sweep_radii}  arch={cfg.sweep_arch}  jobs={cfg.jobs}")
+
+    core = O.run_core(cfg)
+    scaling = O.run_scaling(cfg)
+    landscape = O.run_landscape(cfg)
+    gcheck = O.gradient_check(cfg)
+
+    paths = {
+        "figure_descent.pdf": figures.plot_descent(core, os.path.join(ROOT, "figure_descent.pdf")),
+        "figure_collapse.pdf": figures.plot_collapse(core, os.path.join(ROOT, "figure_collapse.pdf")),
+        "figure_scaling.pdf": figures.plot_scaling(scaling, os.path.join(ROOT, "figure_scaling.pdf")),
+        "figure_landscape.pdf": figures.plot_landscape(landscape, os.path.join(ROOT, "figure_landscape.pdf")),
+    }
+    for p in paths.values():
+        _copy_to_paper(p)
+
+    _write_csv(scaling)
+    _write_md(core, scaling, landscape, gcheck, cfg)
+    _print_summary(core, scaling, landscape, gcheck)
+    print("- figures:", ", ".join(paths))
+    print("- results: RESULTS.md ; raw sweep: scaling_points.csv")
+
+
+def _collapse_stats(scaling):
+    """Geometric-mean ratio measured/predicted and fraction within 2x -> robustness."""
+    import numpy as np
+    r = np.array([p["rel"] / p["s2"] for p in scaling["points"] if p["s2"] > 0])
+    return float(np.exp(np.mean(np.log(r)))), float(((r > 0.5) & (r < 2.0)).mean()), len(r)
+
+
+def _print_summary(core, scaling, landscape, gcheck):
+    Ks = sorted(core["curvatures"])
+    gm, frac2x, n = _collapse_stats(scaling)
+    print("# Optimization experiments")
+    print(f"- E1 collapse: |b| intrinsic(K=0)={core['exponents'][0.0]:.4g} == "
+          f"surrogate={core['exponents']['surrogate']:.4g}")
+    print(f"- E2 sharpness rel (measured/S^2): geo-mean={gm:.3f}, "
+          f"{frac2x:.0%} within 2x over {n} sweep points")
     for K in Ks:
-        print(f"    K={K:>5g}:  lambda*={exp['sharpness'][K]:.4g}"
-              f"  (rel {exp['sharpness_rel'][K]:.3g})"
-              f"  2/lambda*={exp['eta_pred'][K]:.4g}"
-              f"  S_K(R)^2={exp['s2'][K]:.4g}")
-    khyp = min(Ks); ksph = max(Ks)
-    print(f"- hyperbolic sharpening K={khyp:g}: lambda*/lambda*_0 = "
-          f"{exp['sharpness_rel'][khyp]:.3g} (predicted step {exp['eta_pred'][khyp]:.3g} "
-          f"vs Euclidean {exp['eta_pred'][0.0]:.3g})")
-    print(f"- spherical relaxation K={ksph:g}: lambda*/lambda*_0 = "
-          f"{exp['sharpness_rel'][ksph]:.3g} (predicted step {exp['eta_pred'][ksph]:.3g} "
-          f"> Euclidean {exp['eta_pred'][0.0]:.3g})")
+        print(f"    K={K:>5g}: lambda*={core['sharpness'][K]:.4g} "
+              f"rel={core['sharpness_rel'][K]:.3g} S^2={core['s2'][K]:.4g}")
+    print("- E7 landscape (frac reaching global | max final loss):")
+    for K in sorted(landscape):
+        print(f"    K={K:>5g}: {landscape[K]['frac_global']:.0%} | "
+              f"{landscape[K]['max_final']:.2e}")
+    print("- GC gradient max-rel-error:",
+          ", ".join(f"K={K:g}:{e:.1e}" for K, e in gcheck.items()))
 
 
-def _write_md(exp, cfg, descent, collapse):
-    Ks = sorted(exp["curvatures"])
-    lines = [
+def _write_csv(scaling):
+    import csv
+    with open(os.path.join(ROOT, "scaling_points.csv"), "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["R", "depth", "width", "seed", "K", "s2", "rel"])
+        w.writeheader()
+        for p in scaling["points"]:
+            w.writerow(p)
+
+
+def _write_md(core, scaling, landscape, gcheck, cfg):
+    Ks = sorted(core["curvatures"])
+    gm, frac2x, n = _collapse_stats(scaling)
+    L = [
         "# Results: curvature and the deep-linear step size", "",
-        f"Deep-linear network on the kappa-Stereographic model, depth {cfg.depth}, "
-        f"width {cfg.width}, m={cfg.n_samples}, radius R={cfg.radius}, "
-        f"{exp['n_seeds']} seeds. Regenerate: `python run.py`.", "",
-        "Signed sectional curvature K: K<0 hyperbolic, K=0 Euclidean, K>0 spherical.", "",
-        "## Near-optimum sharpness vs curvature (the step-size mechanism)", "",
-        "The step-size ceiling eta*_K = O(1/S_K(R)^2) is a worst-case bound; its clean "
-        "witness is the late-phase landscape sharpness lambda*_K (top Hessian eigenvalue "
-        "of the intrinsic loss at the converged solution), where the paper's "
-        "adaptive-schedule analysis gives L -> S_K(R)^2 * mean||xi||^2. It increases "
-        "with hyperbolic curvature and decreases for spherical curvature, matching "
-        "S_K(R)^2 in the moderate regime and exceeding it at strong hyperbolic curvature "
-        "(the H_K, B_K terms).", "",
-        "| K | S_K(R)^2 | lambda*_K | lambda*_K/lambda*_0 | 2/lambda*_K (pred. step) |",
-        "|---|---|---|---|---|",
+        f"kappa-Stereographic deep-linear net, depth {cfg.depth}, width {cfg.width}, "
+        f"m={cfg.n_samples}, {core['n_seeds']} seeds. Signed curvature K (<0 hyperbolic, "
+        ">0 spherical). Regenerate: `python run.py` (quick) / `python run.py --full` (server).",
+        "",
+        "## E1 collapse + linear convergence  (Thm convergence, Prop surrogate)",
+        f"- intrinsic |b| at K=0 = {core['exponents'][0.0]:.5g}; "
+        f"surrogate |b| = {core['exponents']['surrogate']:.5g}  (identical => exact collapse)",
+        "", f"![descent](figure_descent.pdf)", "",
+        "## E2 near-optimum sharpness ~ S_K(R)^2  (step-size mechanism, Cor positive)", "",
+        "| K | S_K(R)^2 | lambda*_K | lambda*_K/lambda*_0 |",
+        "|---|---|---|---|",
     ]
     for K in Ks:
-        lines.append(f"| {K:g} | {exp['s2'][K]:.3f} | {exp['sharpness'][K]:.4f} "
-                     f"(±{exp['sharpness_ci'][K]:.4f}) | {exp['sharpness_rel'][K]:.3f} "
-                     f"| {exp['eta_pred'][K]:.4f} |")
-    lines += [
-        "", f"![descent]({os.path.basename(descent)})", "",
-        "## Collapse and linear convergence", "",
-        "At K=0 the intrinsic loss equals the Euclidean tangent surrogate exactly; the "
-        "per-step convergence exponent |b| coincides with the surrogate there and moves "
-        "with curvature away from it.", "",
-        f"- intrinsic |b| at K=0: {exp['exponents'][0.0]:.4g}; "
-        f"surrogate |b|: {exp['exponents']['surrogate']:.4g}", "",
-        f"![collapse]({os.path.basename(collapse)})", "",
+        L.append(f"| {K:g} | {core['s2'][K]:.3f} | {core['sharpness'][K]:.4f} "
+                 f"(±{core['sharpness_ci'][K]:.4f}) | {core['sharpness_rel'][K]:.3f} "
+                 f"(±{core['sharpness_rel_ci'][K]:.3f}) |")
+    L += [
+        "",
+        f"Robustness (fig:scaling): across radii {list(cfg.sweep_radii)} and "
+        f"architectures {[list(a) for a in cfg.sweep_arch]}, the ratio measured/predicted "
+        f"has geometric mean {gm:.3f} and {frac2x:.0%} of {n} points fall within 2x of "
+        "the S_K(R)^2 prediction.",
+        "", f"![scaling](figure_scaling.pdf)", "",
+        "## E7 no spurious minima on the tube  (Thm landscape)", "",
+        "| K | frac reaching global (loss<1e-3) | max final loss |",
+        "|---|---|---|",
+    ]
+    for K in sorted(landscape):
+        L.append(f"| {K:g} | {landscape[K]['frac_global']:.0%} | {landscape[K]['max_final']:.2e} |")
+    L += [
+        "", f"![landscape](figure_landscape.pdf)", "",
+        "## GC gradient correctness (autograd vs central differences)",
+        "- max relative error: " + ", ".join(f"K={K:g}: {e:.1e}" for K, e in gcheck.items()),
+        "",
     ]
     with open(os.path.join(ROOT, "RESULTS.md"), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write("\n".join(L) + "\n")
 
 
 if __name__ == "__main__":
