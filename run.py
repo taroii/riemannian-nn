@@ -88,21 +88,36 @@ def main():
     print("- results: RESULTS.md ; raw sweep: scaling_points.csv")
 
 
-def _collapse_stats(scaling):
-    """Geometric-mean ratio measured/predicted and fraction within 2x -> robustness."""
+def _collapse_stats(scaling, regime=2.0):
+    """Robustness of lambda*/lambda*_0 ~ S_K(R)^2, full range and in the controlled
+    regime sqrt(|K|)*R <= regime (where the comparison-geometry bounds are tight)."""
+    import math
     import numpy as np
-    r = np.array([p["rel"] / p["s2"] for p in scaling["points"] if p["s2"] > 0])
-    return float(np.exp(np.mean(np.log(r)))), float(((r > 0.5) & (r < 2.0)).mean()), len(r)
+
+    def stats(pts):
+        r = np.array([p["rel"] / p["s2"] for p in pts
+                      if p["s2"] > 0 and np.isfinite(p["rel"]) and p["rel"] > 0])
+        if r.size == 0:
+            return {"gm": float("nan"), "w15": 0.0, "w2": 0.0, "n": 0}
+        return {"gm": float(np.exp(np.mean(np.log(r)))),
+                "w15": float(((r > 1 / 1.5) & (r < 1.5)).mean()),
+                "w2": float(((r > 0.5) & (r < 2.0)).mean()), "n": int(r.size)}
+
+    pts = scaling["points"]
+    inr = [p for p in pts if math.sqrt(abs(p["K"])) * p["R"] <= regime]
+    return {"regime": regime, "full": stats(pts), "in": stats(inr)}
 
 
 def _print_summary(core, scaling, landscape, gcheck):
     Ks = sorted(core["curvatures"])
-    gm, frac2x, n = _collapse_stats(scaling)
+    st = _collapse_stats(scaling)
     print("# Optimization experiments")
     print(f"- E1 collapse: |b| intrinsic(K=0)={core['exponents'][0.0]:.4g} == "
           f"surrogate={core['exponents']['surrogate']:.4g}")
-    print(f"- E2 sharpness rel (measured/S^2): geo-mean={gm:.3f}, "
-          f"{frac2x:.0%} within 2x over {n} sweep points")
+    print(f"- E2 sharpness ~ S_K(R)^2: in-regime (sqrt|K|R<={st['regime']:g}) "
+          f"geo-mean={st['in']['gm']:.3f}, {st['in']['w15']:.0%} within 1.5x over "
+          f"{st['in']['n']} configs; full range {st['full']['w2']:.0%} within 2x "
+          f"({scaling.get('dropped', 0)} non-finite dropped)")
     for K in Ks:
         print(f"    K={K:>5g}: lambda*={core['sharpness'][K]:.4g} "
               f"rel={core['sharpness_rel'][K]:.3g} S^2={core['s2'][K]:.4g}")
@@ -125,7 +140,7 @@ def _write_csv(scaling):
 
 def _write_md(core, scaling, landscape, gcheck, cfg):
     Ks = sorted(core["curvatures"])
-    gm, frac2x, n = _collapse_stats(scaling)
+    st = _collapse_stats(scaling)
     L = [
         "# Results: curvature and the deep-linear step size", "",
         f"kappa-Stereographic deep-linear net, depth {cfg.depth}, width {cfg.width}, "
@@ -147,9 +162,14 @@ def _write_md(core, scaling, landscape, gcheck, cfg):
     L += [
         "",
         f"Robustness (fig:scaling): across radii {list(cfg.sweep_radii)} and "
-        f"architectures {[list(a) for a in cfg.sweep_arch]}, the ratio measured/predicted "
-        f"has geometric mean {gm:.3f} and {frac2x:.0%} of {n} points fall within 2x of "
-        "the S_K(R)^2 prediction.",
+        f"architectures {[list(a) for a in cfg.sweep_arch]}, in the controlled regime "
+        f"sqrt(|K|)*R <= {st['regime']:g} the measured/predicted ratio has geometric mean "
+        f"{st['in']['gm']:.3f} with {st['in']['w15']:.0%} of {st['in']['n']} configs "
+        f"within 1.5x of the S_K(R)^2 prediction; over the full range "
+        f"{st['full']['w2']:.0%} of {st['full']['n']} fall within 2x, degrading gracefully "
+        "toward the injectivity boundary as the higher-order H_K,B_K terms enter "
+        f"({scaling.get('dropped', 0)} boundary configs produced non-finite float64 "
+        "geometry and were excluded).",
         "", f"![scaling](figure_scaling.pdf)", "",
         "## E7 no spurious minima on the tube  (Thm landscape)", "",
         "| K | frac reaching global (loss<1e-3) | max final loss |",

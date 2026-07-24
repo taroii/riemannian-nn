@@ -83,6 +83,7 @@ class Config:
     sweep_curvatures: tuple = (0.5, 0.0, -0.5, -1.0, -2.0, -4.0)
     # landscape (E7): random balanced in-tube inits
     landscape_inits: int = 12
+    landscape_steps: int = 12000               # random inits converge slower than balanced
     landscape_curvatures: tuple = (0.0, -1.0, -4.0)
     jobs: int = 1                              # parallel worker processes (server)
     dtype: torch.dtype = manifolds.DEFAULT_DTYPE
@@ -178,18 +179,35 @@ def _run_gd(Ws, xtil, ytil, manifold, eta, n_steps, track_balance=False, loss="i
 
 
 def _train_to_opt(cfg, manifold, seed=None, width=None, radius=None, depth=None):
-    """Train to the optimum at a small step; return converged A*, xtil, ytil."""
+    """Train to the optimum; return converged A*, xtil, ytil.
+
+    Robust to the extreme regime (narrow width x strong curvature x large radius),
+    where a fixed step can exceed 2/lambda and diverge: if the run blows up, restart
+    from the balanced init with the step halved (up to 4 attempts). Any residual
+    non-finite result is filtered downstream.
+    """
     xtil, ytil = _make_problem(cfg, seed=seed, width=width, radius=radius)
-    Ws = _balanced_init(cfg, seed=seed, depth=depth, width=width)
-    for _ in range(cfg.train_steps):
-        for w in Ws:
-            if w.grad is not None:
-                w.grad = None
-        _intrinsic(Ws, xtil, ytil, manifold).backward()
-        with torch.no_grad():
+    eta = cfg.train_eta
+    A = None
+    for _attempt in range(4):
+        Ws = _balanced_init(cfg, seed=seed, depth=depth, width=width)
+        diverged = False
+        for step in range(cfg.train_steps):
             for w in Ws:
-                w -= cfg.train_eta * w.grad
-    return _end_to_end(Ws).detach(), xtil, ytil
+                if w.grad is not None:
+                    w.grad = None
+            _intrinsic(Ws, xtil, ytil, manifold).backward()
+            with torch.no_grad():
+                for w in Ws:
+                    w -= eta * w.grad
+            if step % 500 == 499 and not torch.isfinite(Ws[0]).all():
+                diverged = True
+                break
+        A = _end_to_end(Ws).detach()
+        if not diverged and torch.isfinite(A).all():
+            return A, xtil, ytil
+        eta *= 0.5
+    return A, xtil, ytil
 
 
 def _sharpness(A, xtil, ytil, manifold, iters=80):
@@ -328,17 +346,22 @@ def run_scaling(cfg: Config | None = None) -> dict:
             for (depth, width) in cfg.sweep_arch
             for R in cfg.sweep_radii
             for sd in seeds]
-    points = []   # dicts: R, depth, width, seed, K, s2, rel
+    points, dropped = [], 0   # points: R, depth, width, seed, K, s2, rel
     for (depth, width, R, sd), lam in _run_jobs(jobs, cfg.jobs):
         l0 = lam.get(0.0)
-        if not l0:
+        if not l0 or not math.isfinite(l0):
+            dropped += sum(1 for K in Ks if K != 0.0)
             continue
         for K in Ks:
+            v = lam[K]
+            if not math.isfinite(v) or v <= 0:
+                dropped += 1
+                continue
             points.append({
                 "R": R, "depth": depth, "width": width, "seed": sd, "K": K,
-                "s2": s_signed(K, R) ** 2, "rel": lam[K] / l0,
+                "s2": s_signed(K, R) ** 2, "rel": v / l0,
             })
-    return {"points": points,
+    return {"points": points, "dropped": dropped,
             "radii": list(cfg.sweep_radii), "arch": [list(a) for a in cfg.sweep_arch]}
 
 
@@ -362,7 +385,7 @@ def run_landscape(cfg: Config | None = None) -> dict:
                     torch.randn(cfg.width, cfg.width, generator=g, dtype=cfg.dtype))
                 sc = (0.6 + 0.5 * torch.rand(1, generator=g, dtype=cfg.dtype)).item()
                 Ws.append((q * sc).clone().requires_grad_(True))
-            _run_gd(Ws, xtil, ytil, man, cfg.train_eta, cfg.train_steps)
+            _run_gd(Ws, xtil, ytil, man, cfg.train_eta, cfg.landscape_steps)
             finals.append(_intrinsic(Ws, xtil, ytil, man).item())
         import numpy as np
         finals = np.asarray(finals)

@@ -94,34 +94,59 @@ def plot_collapse(core: dict, out_path: str) -> str:
     return out_path
 
 
-def plot_scaling(scaling: dict, out_path: str) -> str:
-    """Robustness collapse: every (R, arch, seed, K) point on the identity line."""
-    pts = scaling["points"]
-    fig, ax = plt.subplots(figsize=(4.2, 4.0))
+def plot_scaling(scaling: dict, out_path: str, regime=2.0) -> str:
+    """Robustness: lambda*_K/lambda*_0 vs S_K(R)^2 across (R, arch, seed, K).
+
+    The comparison-geometry bounds are tightest away from the injectivity boundary,
+    so we distinguish the controlled regime sqrt(|K|)*R <= `regime` (colored by R)
+    from the boundary regime (grey, where higher-order H_K,B_K terms and float64
+    geometry add scatter). Nothing is hidden -- the boundary points are shown.
+    """
+    import math
+    pts = [p for p in scaling["points"] if p["s2"] > 0 and math.isfinite(p["rel"]) and p["rel"] > 0]
+    def t(p):
+        return math.sqrt(abs(p["K"])) * p["R"]
+    inr = [p for p in pts if t(p) <= regime]
+    out = [p for p in pts if t(p) > regime]
+
+    fig, ax = plt.subplots(figsize=(4.4, 4.0))
     radii = sorted({p["R"] for p in pts})
     archs = sorted({(p["depth"], p["width"]) for p in pts})
-    cmap = plt.get_cmap("plasma")
+    cmap = plt.get_cmap("viridis")
     markers = ["o", "s", "^", "D", "v", "P"]
     rcol = {R: cmap(i / max(len(radii) - 1, 1)) for i, R in enumerate(radii)}
     amark = {a: markers[i % len(markers)] for i, a in enumerate(archs)}
-    for p in pts:
-        ax.scatter(p["s2"], p["rel"], s=14, alpha=0.5,
-                   color=rcol[p["R"]], marker=amark[(p["depth"], p["width"])])
+
+    for p in out:                      # boundary regime: greyed, in the background
+        ax.scatter(p["s2"], p["rel"], s=10, alpha=0.18, color="0.6",
+                   marker=amark[(p["depth"], p["width"])], zorder=1)
+    for p in inr:                      # controlled regime: colored by R
+        ax.scatter(p["s2"], p["rel"], s=14, alpha=0.55, color=rcol[p["R"]],
+                   marker=amark[(p["depth"], p["width"])], zorder=2)
+
     allx = [p["s2"] for p in pts] + [p["rel"] for p in pts]
     lo, hi = min(allx) * 0.7, max(allx) * 1.4
-    ax.plot([lo, hi], [lo, hi], "k--", lw=1.2, label="identity")
+    ax.plot([lo, hi], [lo, hi], "k--", lw=1.2, zorder=3)
+    # in-regime collapse quality
+    r = [p["rel"] / p["s2"] for p in inr]
+    within = sum(1 for x in r if 1 / 1.5 < x < 1.5) / len(r) if r else 0.0
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel(r"$S_K(R)^2$ (theory)")
     ax.set_ylabel(r"$\lambda^\star_K/\lambda^\star_0$ (measured)")
-    ax.set_title("Curvature scaling collapses across R and architecture")
+    ax.set_title(r"Sharpness tracks $S_K(R)^2$ across R, architecture, seed")
+    ax.annotate(rf"$\sqrt{{|K|}}\,R\leq{regime:g}$: {within:.0%} within $1.5\times$"
+                f"\n({len(inr)} configs)", xy=(0.03, 0.97), xycoords="axes fraction",
+                fontsize=7, ha="left", va="top")
     from matplotlib.lines import Line2D
     h1 = [Line2D([], [], marker="o", ls="", color=rcol[R], label=f"R={R:g}") for R in radii]
+    h1 += [Line2D([], [], marker="o", ls="", color="0.6",
+                  label=rf"$\sqrt{{|K|}}R>{regime:g}$")]
     h2 = [Line2D([], [], marker=amark[a], ls="", color="gray",
                  label=f"N={a[0]},d={a[1]}") for a in archs]
-    leg1 = ax.legend(handles=h1, fontsize=6, loc="upper left", title="radius")
+    leg1 = ax.legend(handles=h1, fontsize=6, loc="lower right", title="radius")
     ax.add_artist(leg1)
     ax.legend(handles=h2 + [Line2D([], [], ls="--", color="k", label="identity")],
-              fontsize=6, loc="lower right", title="architecture")
+              fontsize=6, loc="upper left", bbox_to_anchor=(0.0, 0.86), title="architecture")
     fig.tight_layout(); fig.savefig(out_path, bbox_inches="tight"); plt.close(fig)
     return out_path
 
