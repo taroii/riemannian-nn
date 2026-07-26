@@ -85,6 +85,10 @@ class Config:
     landscape_inits: int = 12
     landscape_steps: int = 12000               # random inits converge slower than balanced
     landscape_curvatures: tuple = (0.0, -1.0, -4.0)
+    # surrogate control (Prop surrogate): intrinsic GD fans out, surrogate GD overlaps
+    surrogate_curvatures: tuple = (1.0, 0.0, -1.0, -2.0, -4.0, -8.0)
+    surrogate_eta: float = 0.03
+    surrogate_steps: int = 800
     jobs: int = 1                              # parallel worker processes (server)
     dtype: torch.dtype = manifolds.DEFAULT_DTYPE
 
@@ -262,13 +266,43 @@ def _lambda_job(args):
     return (depth, width, R, seed), out
 
 
-def _run_jobs(jobs, n_workers):
-    """Map _lambda_job over jobs, in parallel if n_workers>1 (falls back to serial)."""
+def _landscape_job(args):
+    """Worker: train one random balanced in-tube init to convergence; return final loss."""
+    cfg, K, i = args
+    torch.set_num_threads(1)
+    man = manifolds.stereographic(K)
+    xtil, ytil = _make_problem(cfg, seed=cfg.seed)
+    g = torch.Generator().manual_seed(9000 + i)
+    Ws = []
+    for _ in range(cfg.depth):
+        q, _ = torch.linalg.qr(torch.randn(cfg.width, cfg.width, generator=g, dtype=cfg.dtype))
+        sc = (0.6 + 0.5 * torch.rand(1, generator=g, dtype=cfg.dtype)).item()
+        Ws.append((q * sc).clone().requires_grad_(True))
+    _run_gd(Ws, xtil, ytil, man, cfg.train_eta, cfg.landscape_steps)
+    return K, float(_intrinsic(Ws, xtil, ytil, man).item())
+
+
+def _surrogate_job(args):
+    """Worker: from one balanced init, run intrinsic GD and surrogate GD; return
+    the two loss trajectories normalized by their initial value."""
+    cfg, K, seed, eta, steps = args
+    torch.set_num_threads(1)
+    man = manifolds.stereographic(K)
+    xt, yt = _make_problem(cfg, seed=seed)
+    li, _ = _run_gd(_balanced_init(cfg, seed=seed), xt, yt, man, eta, steps, loss="intrinsic")
+    ls, _ = _run_gd(_balanced_init(cfg, seed=seed), xt, yt, man, eta, steps, loss="surrogate")
+    li = [v / (li[0] + 1e-30) for v in li]
+    ls = [v / (ls[0] + 1e-30) for v in ls]
+    return K, li, ls
+
+
+def _run_jobs(fn, jobs, n_workers):
+    """Map `fn` over jobs, in parallel if n_workers>1 (falls back to serial)."""
     if n_workers <= 1 or len(jobs) <= 1:
-        return [_lambda_job(j) for j in jobs]
+        return [fn(j) for j in jobs]
     from concurrent.futures import ProcessPoolExecutor
     with ProcessPoolExecutor(max_workers=n_workers) as ex:
-        return list(ex.map(_lambda_job, jobs))
+        return list(ex.map(fn, jobs))
 
 
 # --------------------------------------------------------------------------- #
@@ -288,7 +322,7 @@ def run_core(cfg: Config | None = None) -> dict:
 
     # per-seed sharpness at every K (so ratios are computed within a seed); parallel.
     jobs = [(cfg, cfg.depth, cfg.width, R, sd, Ks) for sd in seeds]
-    lam_by_seed = {sd: lam for (_, _, _, sd), lam in _run_jobs(jobs, cfg.jobs)}
+    lam_by_seed = {sd: lam for (_, _, _, sd), lam in _run_jobs(_lambda_job, jobs, cfg.jobs)}
 
     for K in Ks:
         sharp[K], sharp_ci[K] = _mean_ci([lam_by_seed[sd][K] for sd in seeds])
@@ -347,7 +381,7 @@ def run_scaling(cfg: Config | None = None) -> dict:
             for R in cfg.sweep_radii
             for sd in seeds]
     points, dropped = [], 0   # points: R, depth, width, seed, K, s2, rel
-    for (depth, width, R, sd), lam in _run_jobs(jobs, cfg.jobs):
+    for (depth, width, R, sd), lam in _run_jobs(_lambda_job, jobs, cfg.jobs):
         l0 = lam.get(0.0)
         if not l0 or not math.isfinite(l0):
             dropped += sum(1 for K in Ks if K != 0.0)
@@ -370,29 +404,47 @@ def run_scaling(cfg: Config | None = None) -> dict:
 # --------------------------------------------------------------------------- #
 
 def run_landscape(cfg: Config | None = None) -> dict:
-    """Many random BALANCED in-tube inits -> do all reach the global value?"""
+    """Many random BALANCED in-tube inits -> do all reach the global value? (parallel)"""
     cfg = cfg or Config()
+    import numpy as np
+    jobs = [(cfg, K, i) for K in cfg.landscape_curvatures
+            for i in range(cfg.landscape_inits)]
+    finals = {K: [] for K in cfg.landscape_curvatures}
+    for K, lf in _run_jobs(_landscape_job, jobs, cfg.jobs):
+        finals[K].append(lf)
     out = {}
     for K in cfg.landscape_curvatures:
-        man = manifolds.stereographic(K)
-        xtil, ytil = _make_problem(cfg, seed=cfg.seed)
-        finals = []
-        for i in range(cfg.landscape_inits):
-            g = torch.Generator().manual_seed(9000 + i)
-            Ws = []
-            for _ in range(cfg.depth):
-                q, _ = torch.linalg.qr(
-                    torch.randn(cfg.width, cfg.width, generator=g, dtype=cfg.dtype))
-                sc = (0.6 + 0.5 * torch.rand(1, generator=g, dtype=cfg.dtype)).item()
-                Ws.append((q * sc).clone().requires_grad_(True))
-            _run_gd(Ws, xtil, ytil, man, cfg.train_eta, cfg.landscape_steps)
-            finals.append(_intrinsic(Ws, xtil, ytil, man).item())
-        import numpy as np
-        finals = np.asarray(finals)
-        out[K] = {"finals": finals.tolist(),
-                  "frac_global": float((finals < 1e-3).mean()),
-                  "max_final": float(finals.max())}
+        arr = np.asarray(finals[K])
+        out[K] = {"finals": arr.tolist(),
+                  "frac_global": float((arr < 1e-3).mean()),
+                  "max_final": float(arr.max())}
     return out
+
+
+def run_surrogate(cfg: Config | None = None) -> dict:
+    """Surrogate curvature-free control (Prop surrogate): at a fixed step, intrinsic
+    GD separates by K while surrogate GD is curvature-independent (identical across K).
+    Normalized loss trajectories averaged over seeds (mean and std). Parallel."""
+    cfg = cfg or Config()
+    import numpy as np
+    Ks = list(cfg.surrogate_curvatures)
+    seeds = [cfg.seed + s for s in range(cfg.n_seeds)]
+    jobs = [(cfg, K, sd, cfg.surrogate_eta, cfg.surrogate_steps) for K in Ks for sd in seeds]
+    intr = {K: [] for K in Ks}
+    surr = {K: [] for K in Ks}
+    for K, li, ls in _run_jobs(_surrogate_job, jobs, cfg.jobs):
+        intr[K].append(li)
+        surr[K].append(ls)
+
+    def agg(runs):
+        m = min(len(r) for r in runs)
+        A = np.array([r[:m] for r in runs])
+        return {"mean": A.mean(0).tolist(), "std": A.std(0).tolist()}
+
+    return {"curvatures": Ks, "n_seeds": cfg.n_seeds,
+            "eta": cfg.surrogate_eta, "steps": cfg.surrogate_steps,
+            "intrinsic": {K: agg(intr[K]) for K in Ks},
+            "surrogate": {K: agg(surr[K]) for K in Ks}}
 
 
 # --------------------------------------------------------------------------- #

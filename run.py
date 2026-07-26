@@ -58,6 +58,10 @@ def main():
     ap.add_argument("--full", action="store_true", help="server sweep (many seeds/grid)")
     ap.add_argument("--jobs", type=int, default=0,
                     help="parallel worker processes (0 = auto: all cores-2 in --full)")
+    ap.add_argument("--reuse-scaling", action="store_true",
+                    help="load scaling_points.csv instead of recomputing the sweep")
+    ap.add_argument("--replot", action="store_true",
+                    help="reload cached experiment data (_figcache.pkl) and only redraw figures")
     args = ap.parse_args()
     cfg = full_config() if args.full else quick_config()
     if args.jobs > 0:
@@ -67,16 +71,30 @@ def main():
     print(f"[run] mode={'FULL' if args.full else 'QUICK'}  seeds={cfg.n_seeds}  "
           f"radii={cfg.sweep_radii}  arch={cfg.sweep_arch}  jobs={cfg.jobs}")
 
-    core = O.run_core(cfg)
-    scaling = O.run_scaling(cfg)
-    landscape = O.run_landscape(cfg)
-    gcheck = O.gradient_check(cfg)
+    import pickle
+    cache = os.path.join(ROOT, "_figcache.pkl")
+    if args.replot:
+        with open(cache, "rb") as f:
+            d = pickle.load(f)
+        core, scaling, landscape, gcheck = d["core"], d["scaling"], d["landscape"], d["gcheck"]
+        surrogate = d.get("surrogate") or O.run_surrogate(cfg)
+        print("[run] --replot: reloaded cached experiment data; only redrawing figures")
+    else:
+        core = O.run_core(cfg)
+        scaling = _load_scaling_csv() if args.reuse_scaling else O.run_scaling(cfg)
+        landscape = O.run_landscape(cfg)
+        surrogate = O.run_surrogate(cfg)
+        gcheck = O.gradient_check(cfg)
+        with open(cache, "wb") as f:
+            pickle.dump({"core": core, "scaling": scaling, "landscape": landscape,
+                         "surrogate": surrogate, "gcheck": gcheck}, f)
 
     paths = {
         "figure_descent.pdf": figures.plot_descent(core, os.path.join(ROOT, "figure_descent.pdf")),
         "figure_collapse.pdf": figures.plot_collapse(core, os.path.join(ROOT, "figure_collapse.pdf")),
         "figure_scaling.pdf": figures.plot_scaling(scaling, os.path.join(ROOT, "figure_scaling.pdf")),
         "figure_landscape.pdf": figures.plot_landscape(landscape, os.path.join(ROOT, "figure_landscape.pdf")),
+        "figure_surrogate.pdf": figures.plot_surrogate(surrogate, os.path.join(ROOT, "figure_surrogate.pdf")),
     }
     for p in paths.values():
         _copy_to_paper(p)
@@ -127,6 +145,23 @@ def _print_summary(core, scaling, landscape, gcheck):
               f"{landscape[K]['max_final']:.2e}")
     print("- GC gradient max-rel-error:",
           ", ".join(f"K={K:g}:{e:.1e}" for K, e in gcheck.items()))
+
+
+def _load_scaling_csv(path=None):
+    """Reuse a previously computed sweep (scaling_points.csv) for figure regen."""
+    import csv
+    path = path or os.path.join(ROOT, "scaling_points.csv")
+    pts = []
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            pts.append({"R": float(r["R"]), "depth": int(r["depth"]),
+                        "width": int(r["width"]), "seed": int(r["seed"]),
+                        "K": float(r["K"]), "s2": float(r["s2"]), "rel": float(r["rel"])})
+    radii = sorted({p["R"] for p in pts})
+    arch = sorted({(p["depth"], p["width"]) for p in pts})
+    print(f"[run] reusing {len(pts)} scaling points from scaling_points.csv")
+    return {"points": pts, "dropped": 0, "radii": radii,
+            "arch": [list(a) for a in arch]}
 
 
 def _write_csv(scaling):
