@@ -30,7 +30,13 @@ Signed sectional curvature `K` (K<0 hyperbolic, K=0 Euclidean, K>0 spherical):
    and decreases for spherical curvature** (Cor.: positive curvature *relaxes* the
    step), matching `S_K(R)²` in the moderate regime and exceeding it at strong
    hyperbolic curvature (the `H_K, B_K` terms).
-3. **δ-balancedness** stays small along training at every curvature, so the
+3. **Robustness.** The `λ*_K ∝ S_K(R)²` scaling holds across radii, architectures,
+   and seeds (a 4,200-configuration sweep).
+4. **No spurious minima.** Random balanced, in-tube initializations all reach the
+   global minimum.
+5. **Surrogate control.** The tangent-space surrogate is curvature-free: under
+   surrogate gradient descent the loss trajectory is identical across K.
+6. **δ-balancedness** stays small along training at every curvature, so the
    structural hypothesis of the descent lemma is maintained.
 
 > **Honest scope.** `S_K(R)²` is a *worst-case* factor. The whole-trajectory stable
@@ -52,9 +58,22 @@ experiment is small and CPU-only (no GPU needed).
 ## Run
 
 ```bash
-python run.py
+python run.py            # quick: local sanity pass (few seeds, one radius/architecture)
+python run.py --full     # full: 50-seed sweep over radii and architectures
 ```
 
-Writes `figure_descent.pdf`, `figure_collapse.pdf` and `RESULTS.md`. All generated artifacts
+Each run writes five figures to the repo root (and copies them into `paper/` so
+`\includegraphics` resolves):
+
+| File | Content |
+|------|---------|
+| `figure_descent.pdf` | convergence + K→0 collapse, near-optimum sharpness vs K, `S_K(R)²` scaling, δ-balancedness |
+| `figure_collapse.pdf` | single-step convergence exponent vs K |
+| `figure_scaling.pdf` | robustness of the `S_K(R)²` scaling across radii, architectures, seeds |
+| `figure_landscape.pdf` | no spurious minima on the tube |
+| `figure_surrogate.pdf` | tangent-space surrogate is curvature-free |
+
+It also writes `RESULTS.md` (summary, including an autograd-vs-finite-difference
+gradient check) and `scaling_points.csv` (the raw sweep). All generated artifacts
 are gitignored and fully regenerable.
 
