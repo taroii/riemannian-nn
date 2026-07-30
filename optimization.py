@@ -1,4 +1,4 @@
-"""Optimization experiments for the paper (Section 'Experiments').
+"""Optimization experiments for the paper (§4.8 "Empirical verification"; figures in Appendix B).
 
 Deep-linear network on the kappa-Stereographic model (every layer the same
 constant-curvature space), via the collapse identity
@@ -14,20 +14,22 @@ Signed sectional curvature K (geoopt's k): K<0 hyperbolic, K=0 Euclidean, K>0
 spherical.  At K=0 the model is exactly R^d and L_0 = E.
 
 WHAT WE VALIDATE (honest, path A):
-  E1  K->0 collapse + linear convergence          (Thm convergence, Prop surrogate)
+  E1  K->0 collapse + linear convergence          (Theorem 9, Proposition 12)
   E2  near-optimum sharpness lambda*_K ~ S_K(R)^2, sign flip at K=0
-                                                  (step-size mechanism, Cor positive)
-  E3  delta-balancedness maintained along training (Lem trajectory hypothesis)
+                                                  (Proposition 18 sharpness;
+                                                   Theorem 9 ceiling; Corollary 11)
+  E3  delta-balancedness maintained along training (Lemma 8; Definition 1)
   E7  no spurious minima: balanced in-tube inits all reach the global value
-                                                  (Thm landscape)
+                                                  (Theorem 13)
   GC  gradient correctness: autograd == finite differences
 
 The clean witness of the step-size ceiling eta*_K = O(1/S_K(R)^2) is the LATE-PHASE
-sharpness: as the residual D(t) -> 0 the smoothness constant collapses to
-L -> S_K(R)^2 * mean||xi||^2 (Prop adaptive), so we measure the top Hessian
-eigenvalue lambda*_K of the intrinsic loss AT the converged solution and compare to
-S_K(R)^2.  We do NOT report an inflated whole-trajectory step size (that quantity is
-dominated by the benign large-residual region and is nearly curvature-flat).
+sharpness: as the residual D(t) -> 0 the smoothness constant L_{K,R,D} (eq. 5)
+collapses to L -> S_K(R)^2 * mean||xi||^2 (Proposition 15, late phase), so we measure
+the top Hessian eigenvalue lambda*_K of the intrinsic loss AT the converged solution
+and compare to S_K(R)^2 (Proposition 18).  We do NOT report an inflated
+whole-trajectory step size (that quantity is dominated by the benign large-residual
+region and is nearly curvature-flat).
 """
 
 from __future__ import annotations
@@ -85,7 +87,7 @@ class Config:
     landscape_inits: int = 12
     landscape_steps: int = 12000               # random inits converge slower than balanced
     landscape_curvatures: tuple = (0.0, -1.0, -4.0)
-    # surrogate control (Prop surrogate): intrinsic GD fans out, surrogate GD overlaps
+    # surrogate control (Proposition 12): intrinsic GD fans out, surrogate GD overlaps
     surrogate_curvatures: tuple = (1.0, 0.0, -1.0, -2.0, -4.0, -8.0)
     surrogate_eta: float = 0.03
     surrogate_steps: int = 800
@@ -422,7 +424,7 @@ def run_landscape(cfg: Config | None = None) -> dict:
 
 
 def run_surrogate(cfg: Config | None = None) -> dict:
-    """Surrogate curvature-free control (Prop surrogate): at a fixed step, intrinsic
+    """Surrogate curvature-free control (Proposition 12): at a fixed step, intrinsic
     GD separates by K while surrogate GD is curvature-independent (identical across K).
     Normalized loss trajectories averaged over seeds (mean and std). Parallel."""
     cfg = cfg or Config()

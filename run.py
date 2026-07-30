@@ -182,11 +182,11 @@ def _write_md(core, scaling, landscape, gcheck, cfg):
         f"m={cfg.n_samples}, {core['n_seeds']} seeds. Signed curvature K (<0 hyperbolic, "
         ">0 spherical). Regenerate: `python run.py` (quick) / `python run.py --full` (server).",
         "",
-        "## E1 collapse + linear convergence  (Thm convergence, Prop surrogate)",
+        "## E1 collapse + linear convergence  (Theorem 9, Proposition 12)",
         f"- intrinsic |b| at K=0 = {core['exponents'][0.0]:.5g}; "
         f"surrogate |b| = {core['exponents']['surrogate']:.5g}  (identical => exact collapse)",
         "", f"![descent](figure_descent.pdf)", "",
-        "## E2 near-optimum sharpness ~ S_K(R)^2  (step-size mechanism, Cor positive)", "",
+        "## E2 near-optimum sharpness ~ S_K(R)^2  (Proposition 18; Corollary 11)", "",
         "| K | S_K(R)^2 | lambda*_K | lambda*_K/lambda*_0 |",
         "|---|---|---|---|",
     ]
@@ -206,7 +206,7 @@ def _write_md(core, scaling, landscape, gcheck, cfg):
         f"({scaling.get('dropped', 0)} boundary configs produced non-finite float64 "
         "geometry and were excluded).",
         "", f"![scaling](figure_scaling.pdf)", "",
-        "## E7 no spurious minima on the tube  (Thm landscape)", "",
+        "## E7 no spurious minima on the tube  (Theorem 13)", "",
         "| K | frac reaching global (loss<1e-3) | max final loss |",
         "|---|---|---|",
     ]

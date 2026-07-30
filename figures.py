@@ -1,4 +1,4 @@
-"""Figure generation for the optimization experiments (paper Section 'Experiments').
+"""Figure generation for the optimization experiments (paper §4.8; Appendix B).
 
 Matplotlib only. Every plot writes a PDF and returns the path.
 
@@ -169,7 +169,7 @@ def plot_scaling(scaling: dict, out_path: str, regime=2.0) -> str:
 
 
 def plot_surrogate(sg: dict, out_path: str) -> str:
-    """Surrogate is curvature-free (Prop surrogate). (a) intrinsic loss under
+    """Surrogate is curvature-free (Proposition 12). (a) intrinsic loss under
     intrinsic GD separates with K; (b) surrogate loss under surrogate GD is
     identical across K (curves coincide). Mean over seeds."""
     Ks = sorted(sg["curvatures"])
